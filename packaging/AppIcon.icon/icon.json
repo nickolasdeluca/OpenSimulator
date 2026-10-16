@@ -1,0 +1,57 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : "system-light"
+    },
+    {
+      "appearance" : "dark",
+      "value" : "system-dark"
+    }
+  ],
+  "groups" : [
+    {
+      "name" : "Phone",
+      "layers" : [
+        {
+          "name" : "island",
+          "image-name" : "island.svg",
+          "glass" : false,
+          "hidden" : false,
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        },
+        {
+          "name" : "phone",
+          "image-name" : "phone.svg",
+          "glass" : true,
+          "hidden" : false,
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        }
+      ],
+      "lighting" : "combined",
+      "shadow" : { "kind" : "layer-color", "opacity" : 0.6 },
+      "specular" : true,
+      "translucency" : { "enabled" : true, "value" : 0.35 }
+    },
+    {
+      "name" : "Grid",
+      "layers" : [
+        {
+          "name" : "grid",
+          "image-name" : "grid.svg",
+          "glass" : false,
+          "hidden" : false,
+          "opacity" : 0.45,
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        }
+      ],
+      "shadow" : { "kind" : "none", "opacity" : 0 },
+      "specular" : false,
+      "translucency" : { "enabled" : false, "value" : 0 }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}
