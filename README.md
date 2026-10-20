@@ -41,17 +41,13 @@ starts the app without bundling it.
 
 `scripts/notarize.sh` signs the app with your Developer ID certificate, sends it to Apple's notary
 service, staples the ticket and writes `build/OpenSimulator.zip`, which opens on any Mac without a
-Gatekeeper warning. It authenticates with an App Store Connect API key:
+Gatekeeper warning.
 
-```sh
-APPLE_API_KEY_PATH=/path/to/AuthKey_XXXXXXXXXX.p8 \
-APPLE_API_KEY_ID=XXXXXXXXXX \
-APPLE_API_ISSUER_ID=<issuer UUID> \
-scripts/notarize.sh
-```
-
-Or store an Apple ID profile once with `xcrun notarytool store-credentials OpenSimulator` and run
-`scripts/notarize.sh` with no variables.
+It reads its credentials from a `.env` file in the repository root, which git ignores. Copy
+`.env.example` to `.env` and fill in either an App Store Connect API key or an Apple ID with an
+app-specific password. Then run `scripts/notarize.sh` with no arguments. The same variables also
+work when set in the environment, or you can store a keychain profile once with
+`xcrun notarytool store-credentials OpenSimulator` instead.
 
 OpenSimulator uses the Xcode chosen by `xcode-select -p`. To use a different one, set
 `DEVELOPER_DIR` before you launch it.
