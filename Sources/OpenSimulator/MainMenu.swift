@@ -72,6 +72,7 @@ enum MainMenu {
         menu.addItem(.separator())
         menu.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
         menu.addItem(item("Save Screen", #selector(DeviceWindowController.saveScreen(_:)), "s"))
+        menu.addItem(item("Send Files…", #selector(DeviceWindowController.sendFiles(_:)), "o", [.command, .shift]))
         menu.addItem(.separator())
         menu.addItem(item("Shut Down", #selector(DeviceWindowController.shutDownDevice(_:))))
         return menu

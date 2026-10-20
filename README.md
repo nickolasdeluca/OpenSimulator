@@ -68,6 +68,7 @@ OpenSimulator uses the Xcode chosen by `xcode-select -p`. To use a different one
 | Rotate Left / Right | ⌘← / ⌘→ |
 | Shake | ⌃⌘Z |
 | Save Screen (to Desktop) | ⌘S |
+| Send Files (to the Files app or one of your apps) | ⇧⌘O |
 | Copy Screen | ⌃⌘C |
 | Paste Mac clipboard into the device | ⌘V |
 | Copy device selection to the Mac | ⌘C |
@@ -89,7 +90,10 @@ OpenSimulator uses the Xcode chosen by `xcode-select -p`. To use a different one
 - Hold ⌥ to pinch: the pointer is one finger and its mirror image across the center is the
   other. A trackpad pinch works too.
 - Drop an `.app` on a device window to install it, a photo or video to add it to Photos, or a URL
-  to open it.
+  to open it. Other files and folders go to the Files app, under On My iPhone, and Files opens to
+  show them. Hold ⌥ while dropping to send photos and apps to Files as well.
+- File › Send Files… copies files and folders to the Files app or to the Documents folder of an
+  app you installed.
 
 ## How it works
 

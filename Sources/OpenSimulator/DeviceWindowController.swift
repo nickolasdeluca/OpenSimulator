@@ -3,6 +3,7 @@ import CoreImage
 import MetalKit
 import SimBridge
 import SimulatorCore
+import UniformTypeIdentifiers
 
 /// One window per device, like the classic Simulator. The window owns the device's display stream
 /// and input client while it is open, and pauses the stream whenever it cannot be seen.
@@ -427,8 +428,11 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
             Task { await store.perform(nil) { try await $0.openURL(udid, url) } }
             return true
         }
-        let apps = files.filter { ["app", "ipa"].contains($0.pathExtension.lowercased()) }
-        let media = files.filter { !apps.contains($0) }
+        // Holding Option sends everything to the Files app, photos and apps included.
+        let toFiles = NSEvent.modifierFlags.contains(.option)
+        let apps = toFiles ? [] : files.filter { ["app", "ipa"].contains($0.pathExtension.lowercased()) }
+        let media = toFiles ? [] : files.filter { !apps.contains($0) && Self.isMedia($0) }
+        let documents = files.filter { !apps.contains($0) && !media.contains($0) }
         Task {
             for app in apps {
                 overlay.flash("Installing \(app.lastPathComponent)…")
@@ -437,9 +441,83 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
             if !media.isEmpty {
                 await store.perform(nil) { try await $0.addMedia(udid, files: media) }
             }
-            overlay.flash(apps.isEmpty ? "Added to Photos" : "Installed")
+            if !documents.isEmpty {
+                await send(documents, to: nil)
+            } else {
+                overlay.flash(apps.isEmpty ? "Added to Photos" : "Installed")
+            }
         }
         return true
+    }
+
+    /// What `simctl addmedia` takes: photos and videos go to Photos, contact cards to Contacts.
+    private static func isMedia(_ file: URL) -> Bool {
+        guard let type = try? file.resourceValues(forKeys: [.contentTypeKey]).contentType else { return false }
+        return type.conforms(to: .image) || type.conforms(to: .movie) || type.conforms(to: .vCard)
+    }
+
+    /// Copies files to an app's Documents folder, or to the Files app when `app` is nil, which then
+    /// opens to show them.
+    private func send(_ files: [URL], to app: InstalledApp?) async {
+        let udid = udid
+        var folder = app?.documents
+        if app == nil {
+            var apps: [InstalledApp] = []
+            guard await store.perform(nil, { apps = try await $0.installedApps(udid) }) else { return }
+            folder = Simctl.filesAppFolder(in: apps)
+        }
+        guard let folder else {
+            store.lastError = "Couldn't find where \(app?.name ?? "the Files app") keeps its files on this simulator."
+            return
+        }
+        overlay.flash(files.count == 1 ? "Copying \(files[0].lastPathComponent)…" : "Copying \(files.count) items…")
+        do {
+            _ = try await Task.detached { try Simctl.copy(files, into: folder) }.value
+        } catch {
+            store.lastError = error.localizedDescription
+            return
+        }
+        if let app {
+            overlay.flash("Copied to \(app.name)")
+        } else {
+            overlay.flash("Copied to Files")
+            await store.perform(nil) { try await $0.openURL(udid, Simctl.filesAppLink(to: folder)) }
+        }
+    }
+
+    /// File > Send Files: picks files and folders and where on the device they go.
+    @objc func sendFiles(_ sender: Any?) {
+        guard let window else { return }
+        let udid = udid
+        Task {
+            var apps: [InstalledApp] = []
+            guard await store.perform(nil, { apps = try await $0.installedApps(udid) }) else { return }
+            let userApps = apps.filter { $0.isUser && $0.documents != nil }
+
+            let destination = NSPopUpButton()
+            destination.addItem(withTitle: "Files app")
+            if !userApps.isEmpty {
+                destination.menu?.addItem(.separator())
+                for app in userApps {
+                    destination.addItem(withTitle: "\(app.name) Documents")
+                    destination.lastItem?.representedObject = app
+                }
+            }
+            let label = NSTextField(labelWithString: "Send to:")
+            let accessory = NSStackView(views: [label, destination])
+            accessory.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+
+            let panel = NSOpenPanel()
+            panel.message = "Choose files or folders to copy to \(store.device(udid)?.name ?? "the simulator")."
+            panel.prompt = "Send"
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = true
+            panel.accessoryView = accessory
+            panel.isAccessoryViewDisclosed = true
+            guard await panel.beginSheetModal(for: window) == .OK, !panel.urls.isEmpty else { return }
+            await send(panel.urls, to: destination.selectedItem?.representedObject as? InstalledApp)
+        }
     }
 
     private func press(_ button: HardwareButton) {
