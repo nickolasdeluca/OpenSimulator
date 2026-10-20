@@ -128,7 +128,8 @@ final class SimulatorStore: ObservableObject {
     var totalUsage: ResourceUsage {
         usage.values.reduce(.zero) { total, next in
             ResourceUsage(
-                memoryBytes: total.memoryBytes + next.memoryBytes,
+                residentBytes: total.residentBytes + next.residentBytes,
+                footprintBytes: total.footprintBytes + next.footprintBytes,
                 cpuPercent: total.cpuPercent + next.cpuPercent,
                 processCount: total.processCount + next.processCount
             )

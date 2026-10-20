@@ -4,19 +4,23 @@ import Foundation
 /// What one booted simulator costs the Mac right now: every process under its `launchd_sim`,
 /// which is where the guest's apps and daemons all run as ordinary host processes.
 public struct ResourceUsage: Sendable, Equatable {
-    /// Physical footprint, the figure Activity Monitor calls Memory.
-    public var memoryBytes: UInt64
+    /// RAM the processes occupy right now.
+    public var residentBytes: UInt64
+    /// Physical footprint, the figure Activity Monitor calls Memory. It counts compressed pages at
+    /// their uncompressed size, so it can far exceed what the Mac actually holds.
+    public var footprintBytes: UInt64
     /// Percent of one core, so 250 means two and a half cores busy.
     public var cpuPercent: Double
     public var processCount: Int
 
-    public init(memoryBytes: UInt64, cpuPercent: Double, processCount: Int) {
-        self.memoryBytes = memoryBytes
+    public init(residentBytes: UInt64, footprintBytes: UInt64, cpuPercent: Double, processCount: Int) {
+        self.residentBytes = residentBytes
+        self.footprintBytes = footprintBytes
         self.cpuPercent = cpuPercent
         self.processCount = processCount
     }
 
-    public static let zero = ResourceUsage(memoryBytes: 0, cpuPercent: 0, processCount: 0)
+    public static let zero = ResourceUsage(residentBytes: 0, footprintBytes: 0, cpuPercent: 0, processCount: 0)
 }
 
 /// Samples simulator processes with libproc. Cheap enough to run every few seconds, and only runs
@@ -54,13 +58,15 @@ public final class ResourceMonitor: @unchecked Sendable {
 
         for process in processes where process.name == "launchd_sim" {
             guard let udid = Self.deviceUDID(of: process.pid, among: upperUDIDs) else { continue }
-            var memory: UInt64 = 0
+            var resident: UInt64 = 0
+            var footprint: UInt64 = 0
             var cpuTicks: UInt64 = 0
             var count = 0
             var stack = [process.pid]
             while let pid = stack.popLast() {
                 if let usage = Self.rusage(pid) {
-                    memory += usage.ri_phys_footprint
+                    resident += usage.ri_resident_size
+                    footprint += usage.ri_phys_footprint
                     cpuTicks += usage.ri_user_time + usage.ri_system_time
                     count += 1
                 }
@@ -75,7 +81,8 @@ public final class ResourceMonitor: @unchecked Sendable {
             }
             previous[udid] = Totals(cpuNanoseconds: cpuNanoseconds, at: now)
             seen.insert(udid)
-            result[udid] = ResourceUsage(memoryBytes: memory, cpuPercent: percent, processCount: count)
+            result[udid] = ResourceUsage(
+                residentBytes: resident, footprintBytes: footprint, cpuPercent: percent, processCount: count)
         }
         previous = previous.filter { seen.contains($0.key) }
         return result

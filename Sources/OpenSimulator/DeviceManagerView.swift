@@ -123,8 +123,8 @@ struct DeviceManagerView: View {
             Text(booted == 0 ? "Nothing running" : "\(booted) running")
             if booted > 0 {
                 let total = store.totalUsage
-                Label(Format.memory(total.memoryBytes), systemImage: "memorychip")
-                    .help("Memory used by all running simulators")
+                Label(Format.memory(total.residentBytes), systemImage: "memorychip")
+                    .help("RAM used by all running simulators. Footprint: \(Format.memory(total.footprintBytes)), counting compressed memory at full size")
                 Label(Format.cpu(total.cpuPercent), systemImage: "cpu")
                     .help("CPU used by all running simulators, where 100% is one core")
             }
@@ -222,8 +222,9 @@ private struct DeviceRow: View {
                 HStack(spacing: 8) {
                     StateBadge(state: device.state)
                     if let usage, device.state == .booted {
-                        Text("\(Format.memory(usage.memoryBytes)) · \(Format.cpu(usage.cpuPercent)) CPU")
+                        Text("\(Format.memory(usage.residentBytes)) · \(Format.cpu(usage.cpuPercent)) CPU")
                             .monospacedDigit()
+                            .help("Footprint: \(Format.memory(usage.footprintBytes)), counting compressed memory at full size")
                     }
                 }
                 .font(.caption)
