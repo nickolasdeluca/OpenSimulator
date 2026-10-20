@@ -15,6 +15,7 @@ enum Preferences {
         static let screenshotFolder = "ScreenshotFolder"
         static let disabledServiceGroups = "DisabledServiceGroups"
         static let servicesToApply = "ServiceGroupsToApply"
+        static let serviceGroupsVersion = "ServiceGroupsVersion"
     }
 
     static func registerDefaults() {
@@ -64,6 +65,17 @@ enum Preferences {
     static var servicesToApply: Set<String> {
         get { Set(defaults.stringArray(forKey: Key.servicesToApply) ?? []) }
         set { defaults.set(newValue.sorted(), forKey: Key.servicesToApply) }
+    }
+
+    /// Bump when `ServiceGroup`'s labels change, so devices set up with the old list are applied
+    /// again at their next boot. 2 retired sleepd.
+    private static let currentServiceGroupsVersion = 2
+
+    static func reapplyServiceGroupsIfChanged() {
+        guard defaults.integer(forKey: Key.serviceGroupsVersion) < currentServiceGroupsVersion else { return }
+        let all = defaults.dictionary(forKey: Key.disabledServiceGroups) as? [String: [String]] ?? [:]
+        servicesToApply.formUnion(all.keys)
+        defaults.set(currentServiceGroupsVersion, forKey: Key.serviceGroupsVersion)
     }
 
     static var screenshotFolder: URL {

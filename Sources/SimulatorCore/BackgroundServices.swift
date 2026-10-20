@@ -20,7 +20,7 @@ public enum ServiceGroup: String, CaseIterable, Codable, Sendable, Identifiable 
         case .siri: "Siri and Dictation"
         case .intelligence: "Apple Intelligence and Suggestions"
         case .mediaAnalysis: "Photo and Video Analysis"
-        case .fitness: "Fitness and Sleep"
+        case .fitness: "Fitness"
         case .home: "Home"
         case .watch: "Apple Watch Pairing"
         case .appServices: "News, Weather, Wallet, Game Center, CarPlay"
@@ -34,7 +34,7 @@ public enum ServiceGroup: String, CaseIterable, Codable, Sendable, Identifiable 
         case .siri: "Siri, App Intents run by voice, dictation and speech recognition."
         case .intelligence: "Foundation Models, Writing Tools and Siri Suggestions."
         case .mediaAnalysis: "Photos search and Memories, Live Text and Visual Look Up."
-        case .fitness: "The Fitness app, activity sharing and sleep schedules. HealthKit itself stays on."
+        case .fitness: "The Fitness app, activity awards and sharing. HealthKit itself stays on."
         case .home: "HomeKit."
         case .watch: "Pairing a watch simulator and WatchConnectivity."
         case .appServices: "WeatherKit, GameKit, PassKit, FinanceKit and CarPlay."
@@ -55,8 +55,10 @@ public enum ServiceGroup: String, CaseIterable, Codable, Sendable, Identifiable 
         case .mediaAnalysis:
             ["com.apple.mediaanalysisd", "com.apple.photoanalysisd"]
         case .fitness:
+            // Not sleepd: SpringBoard, mobiletimerd and healthd retry it in a tight loop when it's
+            // off, which burns several cores.
             ["com.apple.fitnesscoachingd", "com.apple.fitnessintelligenced", "com.apple.activityawardsd",
-             "com.apple.activitysharingd", "com.apple.sleepd"]
+             "com.apple.activitysharingd"]
         case .home:
             ["com.apple.homed", "com.apple.homeeventsd"]
         case .watch:
@@ -72,6 +74,10 @@ public enum ServiceGroup: String, CaseIterable, Codable, Sendable, Identifiable 
              "com.apple.routined", "com.apple.triald"]
         }
     }
+
+    /// Labels earlier versions turned off that turned out to be needed. Applying any choice turns
+    /// them back on.
+    public static let retiredLabels = ["com.apple.sleepd"]
 
     /// Groups whose every label is in `disabled`, so a device reads back as what was chosen.
     public static func fullyDisabled(in disabled: Set<String>) -> Set<ServiceGroup> {
@@ -104,13 +110,19 @@ extension Simctl {
         _ = try? await run(["spawn", udid, "launchctl", "bootout", "system/\(label)"])
     }
 
-    /// Clears the override. The service starts again at the next boot.
+    /// Clears the override and loads the service again, so a daemon is back without a restart.
+    /// Agents, and daemons whose file isn't found, start at the next boot.
     public func enableService(_ udid: String, label: String) async throws {
         try await run(["spawn", udid, "launchctl", "enable", "system/\(label)"])
+        let root = try await run(["getenv", udid, "SIMULATOR_ROOT"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let plist = "\(root)/System/Library/LaunchDaemons/\(label).plist"
+        guard !root.isEmpty, FileManager.default.fileExists(atPath: plist) else { return }
+        // Fails when the service is already loaded, which is fine.
+        _ = try? await run(["spawn", udid, "launchctl", "bootstrap", "system", plist])
     }
 
     /// Brings the device's overrides in line with `disabled`, touching only labels in
-    /// `ServiceGroup`. Returns true when a service was turned back on, which takes a restart.
+    /// `ServiceGroup` (and its retired labels). Returns true when a service was turned back on, which takes a restart.
     @discardableResult
     public func applyServiceGroups(_ udid: String, disabled: Set<ServiceGroup>) async throws -> Bool {
         let current = try await disabledServices(udid)
@@ -129,6 +141,12 @@ extension Simctl {
                         }
                     }
                     return enabledAny
+                }
+            }
+            for label in ServiceGroup.retiredLabels where current.contains(label) {
+                group.addTask {
+                    try await enableService(udid, label: label)
+                    return false
                 }
             }
             return try await group.reduce(false) { $0 || $1 }

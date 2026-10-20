@@ -23,5 +23,6 @@ struct BackgroundServicesTests {
     @Test func labelsBelongToOneGroup() {
         let labels = ServiceGroup.allCases.flatMap(\.labels)
         #expect(Set(labels).count == labels.count)
+        #expect(Set(labels).isDisjoint(with: ServiceGroup.retiredLabels))
     }
 }

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Preferences.registerDefaults()
+        Preferences.reapplyServiceGroupsIfChanged()
         NSApp.mainMenu = MainMenu.build(app: self)
 
         do {
