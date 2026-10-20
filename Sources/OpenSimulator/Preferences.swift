@@ -1,4 +1,5 @@
 import Foundation
+import SimulatorCore
 
 /// User settings, all in standard UserDefaults. The defaults lean towards using as little of the
 /// Mac as possible, which is the point of this app.
@@ -12,6 +13,8 @@ enum Preferences {
         static let hardwareKeyboard = "ConnectHardwareKeyboard"
         static let scaleMode = "ScaleMode"
         static let screenshotFolder = "ScreenshotFolder"
+        static let disabledServiceGroups = "DisabledServiceGroups"
+        static let servicesToApply = "ServiceGroupsToApply"
     }
 
     static func registerDefaults() {
@@ -43,6 +46,24 @@ enum Preferences {
     static var scaleMode: ScaleMode {
         get { ScaleMode(rawValue: defaults.string(forKey: Key.scaleMode) ?? "") ?? .pointAccurate }
         set { defaults.set(newValue.rawValue, forKey: Key.scaleMode) }
+    }
+
+    /// Service groups the person turned off, by device UDID.
+    static func disabledServiceGroups(for udid: String) -> Set<ServiceGroup> {
+        let all = defaults.dictionary(forKey: Key.disabledServiceGroups) as? [String: [String]] ?? [:]
+        return Set((all[udid] ?? []).compactMap(ServiceGroup.init(rawValue:)))
+    }
+
+    static func setDisabledServiceGroups(_ groups: Set<ServiceGroup>, for udid: String) {
+        var all = defaults.dictionary(forKey: Key.disabledServiceGroups) as? [String: [String]] ?? [:]
+        all[udid] = groups.isEmpty ? nil : groups.map(\.rawValue).sorted()
+        defaults.set(all, forKey: Key.disabledServiceGroups)
+    }
+
+    /// Devices whose service groups still have to be applied, which happens once they are booted.
+    static var servicesToApply: Set<String> {
+        get { Set(defaults.stringArray(forKey: Key.servicesToApply) ?? []) }
+        set { defaults.set(newValue.sorted(), forKey: Key.servicesToApply) }
     }
 
     static var screenshotFolder: URL {

@@ -666,6 +666,7 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         detach()
         overlay.show(erase ? "Erasing…" : "Restarting…", spinning: true)
         let udid = udid
+        if erase { store.willErase(udid) }
         let ok = await store.perform(udid) { simctl in
             try await simctl.shutdown(udid)
             if erase { try await simctl.erase(udid) }

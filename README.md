@@ -19,6 +19,11 @@ It is built to stay out of your Mac's way:
   1 to 2 GB of memory whether or not a window shows it.
 - **You can see the cost.** The device list shows memory and CPU for each running simulator,
   counting every process it runs on your Mac.
+- **Lightweight simulators.** Turn on Lightweight when you create a simulator to switch off iOS
+  background services most apps never use: Siri, Apple Intelligence, photo analysis, Fitness,
+  Home, Watch pairing, News, Weather, Wallet, Game Center, CarPlay and analytics. It saved 14–26%
+  of the simulator's memory in testing. Each group lists what it breaks, and Background Services
+  in a device's menu turns groups back on.
 - **Frame rate limit.** Cap drawing at 30 or 15 fps in Settings if you don't need 60.
 - **Small app.** AppKit and Metal, no web views and no helper daemons. About 30 MB at idle.
 

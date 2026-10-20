@@ -29,6 +29,7 @@ final class SimulatorStore: ObservableObject {
     private let monitor = ResourceMonitor()
     private var monitorTimer: Timer?
     private var monitorClients = 0
+    private var applyingServices: Set<String> = []
 
     init(core: CoreSimulator, simctl: Simctl) {
         self.core = core
@@ -78,6 +79,7 @@ final class SimulatorStore: ObservableObject {
     func refresh() {
         devices = core.devices()
         NotificationCenter.default.post(name: .simulatorDevicesChanged, object: self)
+        applyPendingServices()
     }
 
     func loadCatalog() async {
@@ -171,6 +173,7 @@ final class SimulatorStore: ObservableObject {
     }
 
     func erase(_ udid: String) async {
+        willErase(udid)
         let wasBooted = device(udid)?.state == .booted
         await perform(udid) { simctl in
             if wasBooted { try await simctl.shutdown(udid) }
@@ -179,10 +182,14 @@ final class SimulatorStore: ObservableObject {
     }
 
     func delete(_ udid: String) async {
-        await perform(udid) { simctl in
+        let deleted = await perform(udid) { simctl in
             // Fails harmlessly when the device is already shut down.
             _ = try? await simctl.shutdown(udid)
             try await simctl.delete(udid)
+        }
+        if deleted {
+            Preferences.setDisabledServiceGroups([], for: udid)
+            Preferences.servicesToApply.remove(udid)
         }
     }
 
@@ -190,10 +197,60 @@ final class SimulatorStore: ObservableObject {
         await perform(udid) { try await $0.rename(udid, to: name) }
     }
 
-    func create(name: String, deviceType: String, runtime: String) async -> String? {
+    /// `disabledServices` are applied on the device's first boot.
+    func create(
+        name: String, deviceType: String, runtime: String, disabledServices: Set<ServiceGroup> = []
+    ) async -> String? {
         var created: String?
         await perform(nil) { created = try await $0.create(name: name, deviceType: deviceType, runtime: runtime) }
+        if let created, !disabledServices.isEmpty {
+            setDisabledServiceGroups(disabledServices, for: created)
+        }
         return created
+    }
+
+    // MARK: Lightweight
+
+    func disabledServiceGroups(for udid: String) -> Set<ServiceGroup> {
+        Preferences.disabledServiceGroups(for: udid)
+    }
+
+    /// Records the choice and applies it now if the device is running, otherwise at its next boot.
+    /// Turned-off services stop right away; turned-on ones start at the next boot.
+    func setDisabledServiceGroups(_ groups: Set<ServiceGroup>, for udid: String) {
+        Preferences.setDisabledServiceGroups(groups, for: udid)
+        Preferences.servicesToApply.insert(udid)
+        applyPendingServices()
+    }
+
+    /// Erasing clears the device's launchd overrides, so the choice is applied again on next boot.
+    func willErase(_ udid: String) {
+        if !disabledServiceGroups(for: udid).isEmpty { Preferences.servicesToApply.insert(udid) }
+    }
+
+    private func applyPendingServices() {
+        let pending = Preferences.servicesToApply
+        for device in bootedDevices
+        where pending.contains(device.udid) && !busy.contains(device.udid) && !applyingServices.contains(device.udid) {
+            let udid = device.udid
+            let groups = disabledServiceGroups(for: udid)
+            applyingServices.insert(udid)
+            Task {
+                do {
+                    try await simctl.waitUntilBooted(udid)
+                    try await simctl.applyServiceGroups(udid, disabled: groups)
+                    if disabledServiceGroups(for: udid) == groups { Preferences.servicesToApply.remove(udid) }
+                } catch {
+                    // A device shut down mid-way just tries again at its next boot.
+                    if self.device(udid)?.state == .booted {
+                        lastError = "Background services weren't changed: \(error.localizedDescription)"
+                    }
+                }
+                applyingServices.remove(udid)
+                // The choice changed while this ran.
+                if disabledServiceGroups(for: udid) != groups { applyPendingServices() }
+            }
+        }
     }
 }
 

@@ -12,6 +12,7 @@ struct NewDeviceSheet: View {
     @State private var name = ""
     @State private var nameEdited = false
     @State private var isCreating = false
+    @State private var disabledServices: Set<ServiceGroup> = []
 
     private var runtime: SimRuntimeInfo? { store.runtimes.first { $0.identifier == runtimeID } }
     private var types: [SimDeviceTypeInfo] { runtime.map(store.deviceTypes(for:)) ?? [] }
@@ -36,8 +37,28 @@ struct NewDeviceSheet: View {
                         get: { name },
                         set: { name = $0; nameEdited = true }
                     ))
+                    Toggle("Lightweight", isOn: Binding(
+                        get: { !disabledServices.isEmpty },
+                        set: { disabledServices = $0 ? Set(ServiceGroup.allCases) : [] }
+                    ))
+                    .help("Turn off background services most apps don't use, to save memory and CPU")
                 }
                 .frame(width: 360)
+
+                if !disabledServices.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Turned off on first boot. Change it later with Background Services in the device's menu.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ScrollView {
+                            ServiceGroupsPicker(disabled: $disabledServices)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(height: 260)
+                    }
+                    .frame(width: 360)
+                }
             }
 
             HStack {
@@ -73,7 +94,9 @@ struct NewDeviceSheet: View {
         isCreating = true
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         Task {
-            let udid = await store.create(name: trimmed, deviceType: deviceTypeID, runtime: runtimeID)
+            let udid = await store.create(
+                name: trimmed, deviceType: deviceTypeID, runtime: runtimeID, disabledServices: disabledServices
+            )
             isCreating = false
             if let udid {
                 created(udid)

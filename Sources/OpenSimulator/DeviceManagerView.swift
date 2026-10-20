@@ -13,6 +13,7 @@ struct DeviceManagerView: View {
     @State private var renaming: DeviceSnapshot?
     @State private var newName = ""
     @State private var confirming: Confirmation?
+    @State private var editingServices: DeviceSnapshot?
 
     struct Confirmation: Identifiable {
         enum Kind { case erase, delete }
@@ -48,6 +49,9 @@ struct DeviceManagerView: View {
         }
         .sheet(item: $renaming) { device in
             renameSheet(device)
+        }
+        .sheet(item: $editingServices) { device in
+            BackgroundServicesSheet(store: store, device: device)
         }
         .alert(item: $confirming) { confirmation in
             confirmationAlert(confirmation)
@@ -150,6 +154,7 @@ struct DeviceManagerView: View {
                 newName = device.name
                 renaming = device
             }
+            Button("Background Services…") { editingServices = device }
             Button("Erase All Content and Settings…") { confirming = Confirmation(kind: .erase, device: device) }
         }
         Button("Copy Identifier") {
