@@ -601,6 +601,29 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
+    /// The Settings helper's source, which only an app built by scripts/build-app.sh carries.
+    private static let sensitiveURLHelperInputs: (source: URL, entitlements: URL)? = {
+        guard let source = Bundle.main.url(forResource: "open-sensitive-url", withExtension: "m"),
+              let entitlements = Bundle.main.url(forResource: "open-sensitive-url", withExtension: "entitlements")
+        else { return nil }
+        return (source, entitlements)
+    }()
+
+    /// Tapping General › Keyboard in Settings shows a blank page on iOS 26.5, but its link works.
+    @objc func openKeyboardSettings(_ sender: Any?) {
+        guard let inputs = Self.sensitiveURLHelperInputs else { return }
+        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "OpenSimulator")
+        let udid = udid
+        Task {
+            await store.perform(nil) { simctl in
+                let helper = try await simctl.sensitiveURLHelper(
+                    source: inputs.source, entitlements: inputs.entitlements, cache: cache)
+                try await simctl.openSensitiveURL(udid, Simctl.SettingsPage.keyboard.rawValue, helper: helper)
+            }
+        }
+    }
+
     @objc func toggleAppearance(_ sender: Any?) {
         let udid = udid
         Task {
@@ -782,6 +805,8 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         case #selector(toggleHardwareKeyboard(_:)):
             menuItem.state = Preferences.hardwareKeyboard ? .on : .off
             return display != nil
+        case #selector(openKeyboardSettings(_:)):
+            return Self.sensitiveURLHelperInputs != nil && display != nil && !lifecycleInFlight
         case #selector(saveScreen(_:)), #selector(restartDevice(_:)), #selector(eraseDevice(_:)),
              #selector(shutDownDevice(_:)), #selector(setScaleMode(_:)):
             return true

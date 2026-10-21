@@ -113,6 +113,7 @@ enum MainMenu {
     private static func ioMenu() -> NSMenu {
         let menu = NSMenu(title: "I/O")
         menu.addItem(item("Connect Hardware Keyboard", #selector(DeviceWindowController.toggleHardwareKeyboard(_:)), "k", [.command, .shift]))
+        menu.addItem(item("Keyboard Settings", #selector(DeviceWindowController.openKeyboardSettings(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Volume Up", #selector(DeviceWindowController.volumeUp(_:)), String(UnicodeScalar(NSUpArrowFunctionKey)!)))
         menu.addItem(item("Volume Down", #selector(DeviceWindowController.volumeDown(_:)), String(UnicodeScalar(NSDownArrowFunctionKey)!)))

@@ -13,6 +13,8 @@ memory cost as part of every change.
 Sources/SimBridge/       Objective-C bridge to Xcode's private CoreSimulator and SimulatorKit
 Sources/SimulatorCore/   simctl wrapper and pure logic; everything testable lives here
 Sources/OpenSimulator/   The app: windows, menus, sheets, renderer, store, preferences
+Helpers/                 Simulator tools the app ships as source, builds on first use and runs
+                         with simctl spawn
 Tests/SimulatorCoreTests Swift Testing tests for SimulatorCore
 scripts/                 build-app.sh, notarize.sh
 packaging/               Info.plist template and the Icon Composer app icon
@@ -33,9 +35,13 @@ The build number is the commit count, so build after committing when the number 
 
 - Match the surrounding code: its naming, comment density and idiom. Comments explain why, not what.
 - Put logic that can be tested in `SimulatorCore` and give it tests. Keep the app target thin.
-- Use `simctl` for anything it can do. Private API is only for the screen and input.
+- Use `simctl` for anything it can do. Private API is only for the screen and input, and for
+  links `simctl openurl` refuses, which `Helpers/open-sensitive-url` opens inside the device.
 - Private frameworks are loaded from the selected Xcode at runtime. Never link or bundle them, and
   check every selector before calling it, so a renamed one disables a feature instead of crashing.
+- Never bundle a prebuilt simulator binary. Notarization leaves it out of the ticket and
+  Gatekeeper then rejects the whole app. Ship the source and build it on first use, as
+  `SensitiveURL.swift` does.
 - Never add a render loop or polling. Redraw on new frames, react to CoreSimulator notifications,
   and stop work when a window can't be seen.
 - When credit is due to another project, add it to `THIRD_PARTY_NOTICES.md`.

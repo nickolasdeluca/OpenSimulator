@@ -74,6 +74,7 @@ OpenSimulator uses the Xcode chosen by `xcode-select -p`. To use a different one
 | Copy device selection to the Mac | ⌘C |
 | Type Pasteboard as keystrokes | ⌥⌘V |
 | Connect Hardware Keyboard | ⇧⌘K |
+| Keyboard Settings (Settings › General › Keyboard) | I/O menu |
 | Toggle Light/Dark Appearance | ⇧⌘A |
 | Open URL | ⇧⌘U |
 | Simulate Memory Warning | ⇧⌘M |
@@ -94,6 +95,9 @@ OpenSimulator uses the Xcode chosen by `xcode-select -p`. To use a different one
   show them. Hold ⌥ while dropping to send photos and apps to Files as well.
 - File › Send Files… copies files and folders to the Files app or to the Documents folder of an
   app you installed.
+- I/O › Keyboard Settings opens Settings › General › Keyboard, where Auto-Correction, Check
+  Spelling and the other keyboard switches are. On iOS 26.5 simulators, tapping Keyboard in
+  Settings shows a blank page, so this is the way to reach them.
 
 ## How it works
 
@@ -112,11 +116,18 @@ Xcode when it starts. Nothing private is linked or bundled:
 All of this is in `Sources/SimBridge`. Every selector is checked before it is used, so a future
 Xcode that renames something makes one feature report that it's unavailable instead of crashing.
 
+`simctl openurl` refuses Settings links. For those, the app builds a small helper,
+`Helpers/open-sensitive-url.m`, for the simulator with your Xcode the first time it's needed, and
+runs it inside the device with `simctl spawn`. It asks the device's LaunchServices to open the
+link the way SpringBoard would. The app carries it as source because Apple's notarization leaves
+simulator code out, and Gatekeeper would then reject the app.
+
 ```
 Sources/
   SimBridge/       Objective-C bridge to CoreSimulator and SimulatorKit (private API)
   SimulatorCore/   simctl wrapper, coordinate math, keyboard map, resource monitor
   OpenSimulator/   The app: device manager, device windows, Metal renderer, menus
+Helpers/           open-sensitive-url, which the app builds for the simulator on first use
 Tests/             Unit tests for SimulatorCore
 scripts/           build-app.sh
 packaging/         Info.plist and AppIcon.icon (Icon Composer; follows light, dark, tinted, clear)

@@ -31,6 +31,10 @@ xcrun actool packaging/AppIcon.icon \
 /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP/Contents/Info.plist"
 rm -rf "$ICON_TMP"
 
+# Shipped as source and built for the simulator on first use. A prebuilt simulator binary would
+# be left out of the notarization ticket, and Gatekeeper would then reject the whole app.
+cp Helpers/open-sensitive-url.m Helpers/open-sensitive-url.entitlements "$APP/Contents/Resources/"
+
 # Ad hoc signature so it runs locally. Not sandboxed: it loads Xcode's simulator frameworks and
 # runs simctl, neither of which a sandboxed app may do.
 IDENTITY="${CODESIGN_IDENTITY:--}"
