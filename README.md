@@ -138,3 +138,7 @@ The private framework details come from prior work by OpenDeviceHub, idb and Sin
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+OpenSimulator is an independent project. It is not affiliated with, endorsed by or sponsored by
+Apple Inc. Apple, iOS and Xcode are trademarks of Apple Inc., registered in the U.S. and other
+countries.
