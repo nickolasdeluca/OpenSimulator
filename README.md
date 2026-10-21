@@ -134,3 +134,7 @@ packaging/         Info.plist and AppIcon.icon (Icon Composer; follows light, da
 
 The private framework details come from prior work by OpenDeviceHub, idb and Siniulator. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
