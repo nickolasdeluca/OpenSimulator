@@ -32,6 +32,11 @@ It is built to stay out of your Mac's way:
 - macOS 14 or later on Apple silicon
 - Xcode 26 or 27 with at least one iOS simulator runtime installed
 
+## Download
+
+[Download the latest release](https://ndworks.dev/opensimulator/download), unzip it and move
+`OpenSimulator.app` to Applications. The app is signed with a Developer ID and notarized by Apple.
+
 ## Build and run
 
 ```sh
