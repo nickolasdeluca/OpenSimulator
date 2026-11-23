@@ -67,6 +67,8 @@ NS_SWIFT_NAME(DisplayStream)
 @property (nonatomic) BOOL prefersMaskedSurface;
 @property (nonatomic, readonly, getter=isRunning) BOOL running;
 @property (nonatomic, readonly, nullable) IOSurfaceRef currentSurface CF_RETURNS_NOT_RETAINED;
+/// The Indigo HID target that touches on this screen must be sent to.
+@property (nonatomic, readonly) uint32_t touchTarget;
 
 /// `handler` runs on a private serial queue, once per redraw.
 - (void)startWithHandler:(void (^)(IOSurfaceRef surface))handler;
@@ -79,6 +81,8 @@ NS_SWIFT_NAME(DisplayStream)
 /// Points are normalized to the portrait framebuffer: (0, 0) top left, (1, 1) bottom right.
 NS_SWIFT_NAME(HIDClient)
 @interface OSHIDClient : NSObject
+/// Which screen touches land on. Set it from the `DisplayStream` being shown.
+@property (nonatomic) uint32_t touchTarget;
 - (void)sendTouchAt:(CGPoint)point phase:(OSTouchPhase)phase edge:(OSTouchEdge)edge;
 - (void)sendTouchesAt:(CGPoint)first and:(CGPoint)second phase:(OSTouchPhase)phase;
 /// `usage` is a USB HID keyboard usage (page 0x07), e.g. 0x04 for A.

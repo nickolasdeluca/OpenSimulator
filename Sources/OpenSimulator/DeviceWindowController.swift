@@ -156,6 +156,7 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
         do {
             hid = try store.core.openHID(forDevice: udid)
+            if let display { hid?.touchTarget = display.touchTarget }
         } catch {
             NSLog("OpenSimulator: input unavailable: \(error.localizedDescription)")
         }

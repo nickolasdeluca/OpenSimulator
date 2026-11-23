@@ -209,6 +209,23 @@ static inline BOOL OSSetError(NSError **out, NSError *error) {
 
 #pragma mark Display and input
 
+// The legacy target reaches only the device's primary panel. With more than one panel, as on the
+// iPhone Duo, that is not necessarily the one shown, so touches go to the screen by its ID, which
+// is how SimulatorKit addresses a screen in Xcode 27.
+static const uint32_t OSLegacyTouchTarget = 0x32;
+static const uint32_t OSScreenTouchTargetFlag = 0x40000000;
+
+static uint32_t OSTouchTargetForScreen(id descriptor) {
+    if (![descriptor respondsToSelector:@selector(screenProperties)]) { return OSLegacyTouchTarget; }
+    id properties = [(id<OSPSimScreenPropertiesProvider>)descriptor screenProperties];
+    if (![properties respondsToSelector:@selector(screenID)] || ![properties respondsToSelector:@selector(screenType)]) {
+        return OSLegacyTouchTarget;
+    }
+    id<OSPSimScreenProperties> screen = properties;
+    if (screen.screenType != 0) { return OSLegacyTouchTarget; }
+    return screen.screenID | OSScreenTouchTargetFlag;
+}
+
 - (OSDisplayStream *)openDisplayForDevice:(NSString *)udid error:(NSError **)error {
     @synchronized (self) {
         id<OSPSimDevice> device = [self bootedDeviceWithUDID:udid error:error];
@@ -231,6 +248,7 @@ static inline BOOL OSSetError(NSError **out, NSError *error) {
         // one built-in port per panel, and its main screen is the cover.
         CGSize mainSize = device.deviceType.mainScreenSize;
         id chosen = nil;
+        NSUInteger panels = 0;
         for (id element in io.ioPorts ?: @[]) {
             id<OSPSimDeviceIOPort> port = element;
             if (![(id)port respondsToSelector:@selector(descriptor)]) { continue; }
@@ -242,17 +260,18 @@ static inline BOOL OSSetError(NSError **out, NSError *error) {
             if (![state conformsToProtocol:descriptorState]) { continue; }
             if ([(id<OSPSimDisplayDescriptorState>)state displayClass] != 0) { continue; }
 
-            if (!chosen) { chosen = descriptor; }
-            if (CGSizeEqualToSize([(id<OSPSimDisplayRenderable>)descriptor displaySize], mainSize)) {
+            panels += 1;
+            if (!chosen || (!CGSizeEqualToSize([(id<OSPSimDisplayRenderable>)chosen displaySize], mainSize) &&
+                            CGSizeEqualToSize([(id<OSPSimDisplayRenderable>)descriptor displaySize], mainSize))) {
                 chosen = descriptor;
-                break;
             }
         }
         if (!chosen) {
             OSSetError(error, OSMakeError(8, @"%@ has no display yet. It may still be booting.", device.name));
             return nil;
         }
-        return [[OSDisplayStream alloc] initWithDescriptor:chosen error:error];
+        uint32_t target = panels > 1 ? OSTouchTargetForScreen(chosen) : OSLegacyTouchTarget;
+        return [[OSDisplayStream alloc] initWithDescriptor:chosen touchTarget:target error:error];
     }
 }
 

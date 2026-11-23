@@ -13,7 +13,7 @@ typedef void *_Nullable (*OSKeyboardBuilder)(int32_t usage, int32_t down);
 typedef void *_Nullable (*OSButtonBuilder)(int32_t source, int32_t direction, int32_t target);
 typedef void *_Nullable (*OSArbitraryBuilder)(int32_t target, uint32_t page, uint32_t usage, int32_t direction);
 
-// Targets and directions.
+// Targets and directions. Touches default to the primary panel; see OSTouchTargetForScreen.
 static const uint32_t kTouchTarget = 0x32;
 static const int32_t kButtonTarget = 0x33;
 static const int32_t kButtonDown = 1;
@@ -92,6 +92,7 @@ static inline void OSWriteU32(void *base, size_t offset, uint32_t value) {
         return nil;
     }
     _client = client;
+    _touchTarget = kTouchTarget;
     _queue = dispatch_queue_create("OpenSimulator.hid", DISPATCH_QUEUE_SERIAL);
     return self;
 }
@@ -112,7 +113,7 @@ static inline NSUInteger OSContactType(OSTouchPhase phase) {
     // The builder always produces a multi-touch message with an implied second contact, which the
     // guest reads as a two finger gesture. So the contact is copied into a single-touch envelope.
     CGPoint contact = point;
-    void *source = _mouse(&contact, NULL, kTouchTarget, OSContactType(phase), CGSizeMake(1, 1), edge);
+    void *source = _mouse(&contact, NULL, _touchTarget, OSContactType(phase), CGSizeMake(1, 1), edge);
     if (!source) { return; }
     OSWriteDouble(source, kRatioX, point.x);
     OSWriteDouble(source, kRatioY, point.y);
@@ -135,7 +136,7 @@ static inline NSUInteger OSContactType(OSTouchPhase phase) {
 
 - (void)sendTouchesAt:(CGPoint)first and:(CGPoint)second phase:(OSTouchPhase)phase {
     CGPoint a = first, b = second;
-    void *message = _mouse(&a, &b, kTouchTarget, OSContactType(phase), CGSizeMake(1, 1), OSTouchEdgeNone);
+    void *message = _mouse(&a, &b, _touchTarget, OSContactType(phase), CGSizeMake(1, 1), OSTouchEdgeNone);
     if (!message) { return; }
     // The guest reads the duplicate payload for the leading finger, so both copies are written.
     OSWriteDouble(message, kTwoFirstX, first.x);

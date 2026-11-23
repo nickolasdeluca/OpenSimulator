@@ -72,6 +72,17 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) unsigned short displayClass;
 @end
 
+/// Xcode 27's `SimScreenProperties`, reached through a display descriptor's `screenProperties`.
+@protocol OSPSimScreenProperties <NSObject>
+@property (nonatomic, readonly) uint32_t screenID;
+/// 0 for a panel the device has; 1 and 2 are external and CarPlay screens.
+@property (nonatomic, readonly) NSInteger screenType;
+@end
+
+@protocol OSPSimScreenPropertiesProvider <NSObject>
+@property (nonatomic, readonly, nullable) id screenProperties;
+@end
+
 @protocol OSPSimDisplayRenderable <NSObject>
 @property (nonatomic, readonly) CGSize displaySize;
 /// Named pitch, but it is pixels per inch.

@@ -10,7 +10,9 @@ FOUNDATION_EXTERN NSError *OSMakeError(NSInteger code, NSString *format, ...) NS
 @end
 
 @interface OSDisplayStream ()
-- (nullable instancetype)initWithDescriptor:(id)descriptor error:(NSError *_Nullable *_Nullable)error;
+- (nullable instancetype)initWithDescriptor:(id)descriptor
+                                touchTarget:(uint32_t)touchTarget
+                                      error:(NSError *_Nullable *_Nullable)error;
 @end
 
 @interface OSHIDClient ()
