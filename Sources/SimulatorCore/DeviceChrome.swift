@@ -17,10 +17,13 @@ public struct DeviceChrome: Sendable, Hashable {
 
     public struct Button: Sendable, Hashable {
         public enum Anchor: String, Sendable { case left, right, top, bottom }
+        /// Where along a top or bottom edge the x offset counts from.
+        public enum Alignment: String, Sendable { case leading, center, trailing }
         public let name: String
         public let image: String
         public let imageDown: String
         public let anchor: Anchor
+        public let align: Alignment
         /// From the anchored edge, in points. y runs down from the top of the body.
         public let offset: CGPoint
         /// Where it slides to under the pointer, which makes a side button look like it rises.
@@ -28,9 +31,9 @@ public struct DeviceChrome: Sendable, Hashable {
         /// Side buttons sit under the body so only the part standing proud shows.
         public let onTop: Bool
 
-        public init(name: String, image: String, imageDown: String, anchor: Anchor,
+        public init(name: String, image: String, imageDown: String, anchor: Anchor, align: Alignment = .center,
                     offset: CGPoint, rolloverOffset: CGPoint, onTop: Bool) {
-            self.name = name; self.image = image; self.imageDown = imageDown; self.anchor = anchor
+            self.name = name; self.image = image; self.imageDown = imageDown; self.anchor = anchor; self.align = align
             self.offset = offset; self.rolloverOffset = rolloverOffset; self.onTop = onTop
         }
     }
@@ -130,6 +133,7 @@ extension DeviceChrome {
                 image: image,
                 imageDown: input["imageDown"] as? String ?? image,
                 anchor: anchor,
+                align: Button.Alignment(rawValue: input["align"] as? String ?? "") ?? .center,
                 offset: CGPoint(x: number(normal["x"]), y: number(normal["y"])),
                 rolloverOffset: CGPoint(x: number(rollover["x"]), y: number(rollover["y"])),
                 onTop: input["onTop"] as? Bool ?? false
@@ -203,14 +207,22 @@ public enum DeviceLayout {
     ) -> CGRect {
         let body = bodyRect(upright: upright, chrome: chrome)
         let offset = hovered ? button.rolloverOffset : button.offset
+        // A top button stands proud of the top edge the way a side button does of its side: y
+        // counts in from the outside, and x along the edge from the end `align` names.
         let y: CGFloat = switch button.anchor {
-        case .left, .right, .top: body.maxY - offset.y - imageSize.height
+        case .left, .right: body.maxY - offset.y - imageSize.height
+        case .top: upright.height - offset.y - imageSize.height + sideButtonProtrusion
         case .bottom: body.minY - offset.y - imageSize.height
+        }
+        let alongEdge: CGFloat = switch button.align {
+        case .leading: body.minX + offset.x
+        case .center: body.midX - imageSize.width / 2 + offset.x
+        case .trailing: body.maxX - imageSize.width + offset.x
         }
         let x: CGFloat = switch button.anchor {
         case .left: offset.x - sideButtonProtrusion
         case .right: upright.width - imageSize.width + offset.x + sideButtonProtrusion
-        case .top, .bottom: body.midX - imageSize.width / 2 + offset.x
+        case .top, .bottom: alongEdge
         }
         return CGRect(x: x, y: y, width: imageSize.width, height: imageSize.height)
     }

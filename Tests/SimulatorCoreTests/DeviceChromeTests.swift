@@ -47,6 +47,33 @@ struct DeviceChromeTests {
         #expect(abs(rect.maxY - CGFloat(910 - 262)) < 0.001)
     }
 
+    @Test func topButtonsCountAlongTheEdgeFromTheirAlignedEnd() throws {
+        let json = """
+        {"images":{"composite":"PhoneComposite",
+         "sizing":{"leftWidth":26,"rightWidth":22,"topHeight":14,"bottomHeight":14},
+         "devicePadding":{"top":9,"left":9,"bottom":0,"right":9}},
+         "inputs":[{"name":"volume-up","type":"button","image":"Vol BTN","anchor":"top","align":"leading",
+                    "offsets":{"normal":{"x":316,"y":7},"rollover":{"x":316,"y":2}}},
+                   {"name":"power","type":"button","image":"X_Power BTN","anchor":"top","align":"trailing",
+                    "offsets":{"normal":{"x":-65,"y":8}}}]}
+        """
+        let chrome = try #require(DeviceChrome.parse(json: Data(json.utf8), bundle: URL(fileURLWithPath: "/tmp")))
+        let upright = DeviceLayout.uprightSize(screen: CGSize(width: 466, height: 678), chrome: chrome)
+        let body = DeviceLayout.bodyRect(upright: upright, chrome: chrome)
+        let size = CGSize(width: 66, height: 16)
+
+        let volume = DeviceLayout.buttonRect(chrome.buttons[0], imageSize: size, upright: upright, chrome: chrome, hovered: false)
+        #expect(volume.minX == body.minX + 316)
+        #expect(volume.maxX <= body.maxX)
+        // Only a sliver stands above the body, and more of it under the pointer.
+        #expect(volume.maxY > body.maxY && volume.minY < body.maxY)
+        let raised = DeviceLayout.buttonRect(chrome.buttons[0], imageSize: size, upright: upright, chrome: chrome, hovered: true)
+        #expect(raised.maxY > volume.maxY)
+
+        let power = DeviceLayout.buttonRect(chrome.buttons[1], imageSize: size, upright: upright, chrome: chrome, hovered: false)
+        #expect(power.maxX == body.maxX - 65)
+    }
+
     @Test func landscapeTransformTurnsTheDeviceSideways() {
         let upright = CGSize(width: 100, height: 200)
         let transform = DeviceLayout.transform(viewSize: CGSize(width: 200, height: 100), upright: upright, orientation: .landscapeLeft)
