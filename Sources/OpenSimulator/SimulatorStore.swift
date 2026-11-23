@@ -55,8 +55,15 @@ final class SimulatorStore: ObservableObject {
                     devices: value.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
                 )
             }
-            // Newest runtime first, as Xcode lists them.
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedDescending }
+            // Newest runtime first, as Xcode lists them. Two runtimes can share a name (iOS 27.2 and
+            // its iPhone Duo build), and the dictionary's order changes on every refresh, so ties
+            // fall back to the identifier to keep the list from reordering itself.
+            .sorted {
+                switch $0.name.localizedStandardCompare($1.name) {
+                case .orderedSame: $0.id < $1.id
+                case let order: order == .orderedDescending
+                }
+            }
     }
 
     var unavailableDevices: [DeviceSnapshot] { devices.filter { !$0.isAvailable } }
