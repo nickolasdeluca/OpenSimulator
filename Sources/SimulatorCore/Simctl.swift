@@ -94,8 +94,10 @@ public struct Simctl: Sendable {
 
     // MARK: Device features
 
-    public func screenshot(_ udid: String, to url: URL) async throws {
-        try await run(["io", udid, "screenshot", "--type=png", url.path])
+    /// `screenID` picks the panel on a device with more than one, where simctl can't choose itself.
+    public func screenshot(_ udid: String, to url: URL, screenID: UInt32? = nil) async throws {
+        let display = screenID.map { ["--display=\($0)"] } ?? []
+        try await run(["io", udid, "screenshot", "--type=png"] + display + [url.path])
     }
 
     public func openURL(_ udid: String, _ url: String) async throws { try await run(["openurl", udid, url]) }

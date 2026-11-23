@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage(Preferences.Key.pauseWhenHidden) private var pauseWhenHidden = true
     @AppStorage(Preferences.Key.frameRateLimit) private var frameRateLimit = 60
     @AppStorage(Preferences.Key.showBezel) private var showBezel = true
+    @AppStorage(Preferences.Key.showBottomBar) private var showBottomBar = true
     @AppStorage(Preferences.Key.scaleMode) private var scaleMode = ScaleMode.pointAccurate.rawValue
     @AppStorage(Preferences.Key.screenshotFolder) private var screenshotFolder = ""
 
@@ -32,6 +33,7 @@ struct SettingsView: View {
                     Text("15 fps").tag(15)
                 }
                 Toggle("Show device bezels", isOn: $showBezel)
+                Toggle("Show bottom bar", isOn: $showBottomBar)
             }
 
             Section("Screenshots") {

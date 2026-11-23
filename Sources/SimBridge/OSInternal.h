@@ -12,6 +12,7 @@ FOUNDATION_EXTERN NSError *OSMakeError(NSInteger code, NSString *format, ...) NS
 @interface OSDisplayStream ()
 - (nullable instancetype)initWithDescriptor:(id)descriptor
                                 touchTarget:(uint32_t)touchTarget
+                                 panelCount:(NSUInteger)panelCount
                                       error:(NSError *_Nullable *_Nullable)error;
 @end
 

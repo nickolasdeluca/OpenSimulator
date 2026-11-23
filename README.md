@@ -85,11 +85,17 @@ OpenSimulator uses the Xcode chosen by `xcode-select -p`. To use a different one
 | Simulate Memory Warning | ⇧⌘M |
 | Physical Size / Point Accurate / Pixel Accurate / Fit Screen | ⌘1 / ⌘2 / ⌘3 / ⌘4 |
 | Show Device Bezels | Window menu |
+| Show Bottom Bar | ⌥⌘B |
+| Fold or unfold an iPhone Duo | Device › Hinge, or the bottom bar |
 | Stay On Top | ⌥⌘T |
 
 - Each device opens in its own frame, using the artwork Xcode installs in
   `/Library/Developer/DeviceKit`. Click the side buttons, or drag the frame to move the window.
   Turn the frame off with Window › Show Device Bezels.
+- The bar under the device has Home, App Switcher, Save Screen and Rotate, and on an iPhone Duo
+  its three hinge postures: closed, partially open and open. Hide it with Window › Show Bottom Bar.
+- Opening an iPhone Duo moves iOS to its inner panel, and the window follows. The inner panel is
+  shown without a frame, since Xcode only installs artwork for the closed device.
 - Each device remembers its window size, whether you picked it from the Window menu or dragged a
   corner. Devices you open for the first time use the size set in Settings.
 - Click to tap and drag to swipe. A drag that starts at the bottom edge acts as the home gesture.
@@ -117,6 +123,11 @@ Xcode when it starts. Nothing private is linked or bundled:
   callback on every redraw.
 - **SimulatorKit** builds Indigo HID messages for touch, keyboard and hardware buttons.
   Rotation is a GSEvent sent to the guest's `PurpleWorkspacePort`.
+
+A few things only the guest can do. Their tools ship as source in `Helpers/`, are built for the
+simulator with the selected Xcode on first use, and run with `simctl spawn`: one opens Settings
+links `simctl openurl` refuses, and one sets an iPhone Duo's hinge angle with the same
+vendor-defined HID event Device Hub sends, which is what makes iOS switch panels.
 
 All of this is in `Sources/SimBridge`. Every selector is checked before it is used, so a future
 Xcode that renames something makes one feature report that it's unavailable instead of crashing.

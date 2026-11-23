@@ -53,4 +53,11 @@ struct ScreenGeometryTests {
         #expect(DeviceOrientation.portrait.rotatedRight == .landscapeLeft)
         #expect(DeviceOrientation.landscapeLeft.displayedSize(portrait: pixels) == CGSize(width: 2622, height: 1206))
     }
+
+    @Test func turnsComposeAndWrap() {
+        #expect(DeviceOrientation.portrait.turned(by: 1) == .landscapeLeft)
+        #expect(DeviceOrientation.landscapeRight.turned(by: 1) == .portrait)
+        #expect(DeviceOrientation.portrait.turned(by: -1) == .landscapeRight)
+        #expect(DeviceOrientation.portraitUpsideDown.turned(by: 0) == .portraitUpsideDown)
+    }
 }

@@ -20,7 +20,10 @@ static IOSurfaceRef _Nullable OSSurfaceFromObject(id _Nullable object) {
     BOOL _prefersMasked;
 }
 
-- (instancetype)initWithDescriptor:(id)descriptor touchTarget:(uint32_t)touchTarget error:(NSError **)error {
+- (instancetype)initWithDescriptor:(id)descriptor
+                       touchTarget:(uint32_t)touchTarget
+                        panelCount:(NSUInteger)panelCount
+                             error:(NSError **)error {
     if (!(self = [super init])) { return nil; }
 
     id<OSPSimDisplayRenderable> renderable = descriptor;
@@ -37,6 +40,13 @@ static IOSurfaceRef _Nullable OSSurfaceFromObject(id _Nullable object) {
     _descriptor = descriptor;
     _usesScreenCallbacks = hasScreen;
     _touchTarget = touchTarget;
+    _panelCount = panelCount;
+    if ([descriptor respondsToSelector:@selector(screenProperties)]) {
+        id properties = [(id<OSPSimScreenPropertiesProvider>)descriptor screenProperties];
+        if ([properties respondsToSelector:@selector(screenID)]) {
+            _screenID = [(id<OSPSimScreenProperties>)properties screenID];
+        }
+    }
     _pixelSize = renderable.displaySize;
     _pixelsPerInch = [descriptor respondsToSelector:@selector(displayPitch)] ? renderable.displayPitch : 0;
     _queue = dispatch_queue_create("OpenSimulator.display", DISPATCH_QUEUE_SERIAL);

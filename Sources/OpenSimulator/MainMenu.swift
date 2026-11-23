@@ -1,4 +1,5 @@
 import AppKit
+import SimulatorCore
 
 /// The menu bar, laid out after the classic Simulator's, with its shortcuts. Device actions have a
 /// nil target, so they reach whichever device window is key through the responder chain.
@@ -99,6 +100,13 @@ enum MainMenu {
         menu.addItem(item("Rotate Right", #selector(DeviceWindowController.rotateRight(_:)), String(UnicodeScalar(NSRightArrowFunctionKey)!)))
         menu.addItem(item("Shake", #selector(DeviceWindowController.shake(_:)), "z", [.command, .control]))
         menu.addItem(.separator())
+        // Foldables only, such as the iPhone Duo.
+        for posture in HingePosture.allCases {
+            let entry = item("Hinge \(posture.title)", #selector(DeviceWindowController.setHingePosture(_:)))
+            entry.representedObject = posture.rawValue
+            menu.addItem(entry)
+        }
+        menu.addItem(.separator())
         menu.addItem(item("Home", #selector(DeviceWindowController.pressHome(_:)), "h", [.command, .shift]))
         menu.addItem(item("Swipe Home", #selector(DeviceWindowController.swipeHome(_:))))
         menu.addItem(item("App Switcher", #selector(DeviceWindowController.showAppSwitcher(_:)), "h", [.command, .shift, .control]))
@@ -138,6 +146,7 @@ enum MainMenu {
         }
         menu.addItem(.separator())
         menu.addItem(item("Show Device Bezels", #selector(DeviceWindowController.toggleBezel(_:))))
+        menu.addItem(item("Show Bottom Bar", #selector(DeviceWindowController.toggleBottomBar(_:)), "b", [.command, .option]))
         menu.addItem(item("Stay On Top", #selector(DeviceWindowController.toggleStayOnTop(_:)), "t", [.command, .option]))
         menu.addItem(.separator())
         menu.addItem(item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"))

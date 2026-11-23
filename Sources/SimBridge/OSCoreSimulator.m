@@ -226,7 +226,7 @@ static uint32_t OSTouchTargetForScreen(id descriptor) {
     return screen.screenID | OSScreenTouchTargetFlag;
 }
 
-- (OSDisplayStream *)openDisplayForDevice:(NSString *)udid error:(NSError **)error {
+- (OSDisplayStream *)openDisplayForDevice:(NSString *)udid innerPanel:(BOOL)innerPanel error:(NSError **)error {
     @synchronized (self) {
         id<OSPSimDevice> device = [self bootedDeviceWithUDID:udid error:error];
         if (!device) { return nil; }
@@ -244,10 +244,11 @@ static uint32_t OSTouchTargetForScreen(id descriptor) {
             return nil;
         }
 
-        // Pick the built-in panel whose size matches the device type's main screen. A foldable has
-        // one built-in port per panel, and its main screen is the cover.
+        // The main panel is the built-in one whose size matches the device type's main screen. A
+        // foldable has one built-in port per panel, and its main screen is the cover.
         CGSize mainSize = device.deviceType.mainScreenSize;
-        id chosen = nil;
+        id main = nil;
+        id inner = nil;
         NSUInteger panels = 0;
         for (id element in io.ioPorts ?: @[]) {
             id<OSPSimDeviceIOPort> port = element;
@@ -261,17 +262,21 @@ static uint32_t OSTouchTargetForScreen(id descriptor) {
             if ([(id<OSPSimDisplayDescriptorState>)state displayClass] != 0) { continue; }
 
             panels += 1;
-            if (!chosen || (!CGSizeEqualToSize([(id<OSPSimDisplayRenderable>)chosen displaySize], mainSize) &&
-                            CGSizeEqualToSize([(id<OSPSimDisplayRenderable>)descriptor displaySize], mainSize))) {
-                chosen = descriptor;
+            if (!main && CGSizeEqualToSize([(id<OSPSimDisplayRenderable>)descriptor displaySize], mainSize)) {
+                main = descriptor;
+            } else if (!inner) {
+                inner = descriptor;
             }
         }
+        // Without a size match, the first panel stands in for the main one.
+        if (!main) { main = inner; inner = nil; }
+        id chosen = innerPanel ? inner : main;
         if (!chosen) {
             OSSetError(error, OSMakeError(8, @"%@ has no display yet. It may still be booting.", device.name));
             return nil;
         }
         uint32_t target = panels > 1 ? OSTouchTargetForScreen(chosen) : OSLegacyTouchTarget;
-        return [[OSDisplayStream alloc] initWithDescriptor:chosen touchTarget:target error:error];
+        return [[OSDisplayStream alloc] initWithDescriptor:chosen touchTarget:target panelCount:panels error:error];
     }
 }
 

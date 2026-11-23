@@ -33,7 +33,7 @@ rm -rf "$ICON_TMP"
 
 # Shipped as source and built for the simulator on first use. A prebuilt simulator binary would
 # be left out of the notarization ticket, and Gatekeeper would then reject the whole app.
-cp Helpers/open-sensitive-url.m Helpers/open-sensitive-url.entitlements "$APP/Contents/Resources/"
+cp Helpers/open-sensitive-url.m Helpers/open-sensitive-url.entitlements Helpers/set-hinge-angle.m "$APP/Contents/Resources/"
 
 # Ad hoc signature so it runs locally. Not sandboxed: it loads Xcode's simulator frameworks and
 # runs simctl, neither of which a sandboxed app may do.

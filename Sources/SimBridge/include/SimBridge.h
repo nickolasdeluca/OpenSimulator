@@ -69,6 +69,10 @@ NS_SWIFT_NAME(DisplayStream)
 @property (nonatomic, readonly, nullable) IOSurfaceRef currentSurface CF_RETURNS_NOT_RETAINED;
 /// The Indigo HID target that touches on this screen must be sent to.
 @property (nonatomic, readonly) uint32_t touchTarget;
+/// How many built-in panels the device has: 2 for a foldable such as the iPhone Duo.
+@property (nonatomic, readonly) NSUInteger panelCount;
+/// The screen ID `simctl io --display` takes, 0 when this Xcode doesn't say.
+@property (nonatomic, readonly) uint32_t screenID;
 
 /// `handler` runs on a private serial queue, once per redraw.
 - (void)startWithHandler:(void (^)(IOSurfaceRef surface))handler;
@@ -111,7 +115,10 @@ NS_SWIFT_NAME(CoreSimulator)
 - (NSUInteger)addDeviceObserver:(void (^)(void))handler;
 - (void)removeDeviceObserver:(NSUInteger)token;
 
+/// The device's main panel, or with `innerPanel` a foldable's other built-in panel, which iOS
+/// draws on while it is open.
 - (nullable OSDisplayStream *)openDisplayForDevice:(NSString *)udid
+                                        innerPanel:(BOOL)innerPanel
                                              error:(NSError *_Nullable *_Nullable)error;
 - (nullable OSHIDClient *)openHIDForDevice:(NSString *)udid
                                      error:(NSError *_Nullable *_Nullable)error;

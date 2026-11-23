@@ -31,6 +31,13 @@ public enum DeviceOrientation: Int, Sendable, CaseIterable {
 
     public var rotatedRight: DeviceOrientation { rotatedLeft.rotatedLeft.rotatedLeft }
 
+    /// This orientation turned a further `quarterTurns` clockwise, for a panel that is itself
+    /// mounted sideways.
+    public func turned(by quarterTurns: Int) -> DeviceOrientation {
+        let total = ((self.quarterTurns + quarterTurns) % 4 + 4) % 4
+        return Self.allCases.first { $0.quarterTurns == total } ?? self
+    }
+
     /// The value the guest's workspace port expects.
     public var gsEventValue: UInt32 {
         switch self {

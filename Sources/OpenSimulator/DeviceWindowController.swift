@@ -18,10 +18,19 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
     private let overlay = StatusOverlayView()
     private let chromeView: DeviceChromeView
     private let chrome: DeviceChrome?
+    private let bar = DeviceBarView()
+    private let contentView: DeviceContentView
 
     private var display: DisplayStream?
     private var hid: HIDClient?
+    /// The orientation iOS is in, as the rotate commands set it.
     private var orientation: DeviceOrientation = .portrait
+    /// How far the shown panel is turned from the window's upright. A foldable's inner panel is
+    /// mounted sideways: iOS draws it in landscape while the device is upright.
+    private var panelTurns = 0
+    /// What the window shows: the device's orientation on top of its panel's own turn.
+    private var shownOrientation: DeviceOrientation { orientation.turned(by: panelTurns) }
+    private var posture: HingePosture = .closed
     private var pixelSize: CGSize
     private var pointScale: CGFloat
     private var pixelsPerInch: Int = 0
@@ -56,6 +65,7 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         pointScale = max(snapshot?.pointScale ?? 3, 1)
         chrome = snapshot.flatMap { DeviceChrome.forDeviceType($0.deviceTypeIdentifier) }
         chromeView = DeviceChromeView(screenView: screenView, overlay: overlay)
+        contentView = DeviceContentView(deviceView: chromeView, bar: bar)
 
         let window = NSWindow(
             contentRect: CGRect(origin: .zero, size: CGSize(width: 402, height: 874)),
@@ -70,13 +80,15 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         window.tabbingMode = .disallowed
         window.setFrameAutosaveName("Device-\(udid)")
 
-        window.contentView = chromeView
+        window.contentView = contentView
+        contentView.showsBar = Preferences.showBottomBar
 
         super.init(window: window)
         window.delegate = self
         chromeView.setScreenPoints(screenPoints)
         applyBezelPreference()
         wireInput()
+        wireBar()
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(devicesChanged),
@@ -138,11 +150,7 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         for _ in 0..<20 {
             guard !isClosing else { return }
             do {
-                let stream = try store.core.openDisplay(forDevice: udid)
-                display = stream
-                pixelSize = stream.pixelSize
-                pixelsPerInch = Int(stream.pixelsPerInch)
-                stream.prefersMaskedSurface = true
+                use(try store.core.openDisplay(forDevice: udid, innerPanel: posture.showsInnerPanel))
                 break
             } catch {
                 lastError = error
@@ -164,10 +172,33 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         try? store.core.setHardwareKeyboardEnabled(Preferences.hardwareKeyboard, forDevice: udid)
 
         overlay.hide()
+        bar.setFoldable(isFoldable)
+        bar.setPosture(posture)
+        applyBezelPreference()
         chromeView.setScreenPoints(screenPoints)
         applyZoom(currentZoom, animate: true)
         updateStreaming()
+        // A foldable keeps its posture across a window being closed and opened again, so it is put
+        // back in step with what the window shows.
+        if isFoldable { Task { await sendPosture(posture) } }
     }
+
+    /// Takes a newly opened panel's stream as the one the window shows.
+    private func use(_ stream: DisplayStream) {
+        display = stream
+        pixelSize = stream.pixelSize
+        pixelsPerInch = Int(stream.pixelsPerInch)
+        stream.prefersMaskedSurface = true
+        hid?.touchTarget = stream.touchTarget
+        panelTurns = posture.showsInnerPanel && stream.panelCount > 1 ? Self.innerPanelTurns : 0
+        renderer.setOrientation(shownOrientation)
+        chromeView.setOrientation(shownOrientation)
+    }
+
+    private var isFoldable: Bool { (display?.panelCount ?? 0) > 1 }
+
+    /// Quarter turns clockwise that bring the iPhone Duo's inner panel upright.
+    private static let innerPanelTurns = 1
 
     private func detach() {
         display?.stop()
@@ -220,8 +251,10 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
     }
 
     @objc private func preferencesChanged(_ note: Notification) {
-        if (chromeView.chrome != nil) != (Preferences.showBezel && chrome != nil) {
+        let wantsBezel = Preferences.showBezel && chrome != nil && !(isFoldable && posture.showsInnerPanel)
+        if (chromeView.chrome != nil) != wantsBezel || contentView.showsBar != Preferences.showBottomBar {
             let zoom = currentZoom
+            contentView.showsBar = Preferences.showBottomBar
             applyBezelPreference()
             applyZoom(zoom, animate: true)
         }
@@ -230,7 +263,8 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     /// Show Device Bezels: the device's body on a transparent window, or the bare screen on black.
     private func applyBezelPreference() {
-        let body = Preferences.showBezel ? chrome : nil
+        // The bezel artwork is the closed device, so an open foldable shows its bare screen.
+        let body = Preferences.showBezel && !(isFoldable && posture.showsInnerPanel) ? chrome : nil
         chromeView.setChrome(body)
         guard let window else { return }
         window.isOpaque = body == nil
@@ -278,7 +312,15 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
     }
 
     /// The device as the window shows it at zoom 1 (Point Accurate), body included, turned.
-    private var deviceSize: CGSize { orientation.displayedSize(portrait: chromeView.uprightSize) }
+    private var deviceSize: CGSize { shownOrientation.displayedSize(portrait: chromeView.uprightSize) }
+
+    /// The window's content at a zoom: the device, and the bar under it, never narrower than the
+    /// bar's buttons.
+    private func contentSize(forZoom zoom: CGFloat) -> CGSize {
+        let device = deviceSize
+        let barWidth = contentView.showsBar ? bar.minimumWidth : 0
+        return CGSize(width: max(device.width * zoom, barWidth), height: device.height * zoom + contentView.barHeight)
+    }
 
     // MARK: Size
     //
@@ -307,8 +349,8 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
     }
 
     private var currentZoom: CGFloat {
-        guard let window, deviceSize.width > 0 else { return savedZoom ?? 1 }
-        return window.contentLayoutRect.width / deviceSize.width
+        guard let window, deviceSize.height > 0 else { return savedZoom ?? 1 }
+        return max(window.contentLayoutRect.height - contentView.barHeight, 1) / deviceSize.height
     }
 
     private func zoom(for mode: ScaleMode, on screen: NSScreen) -> CGFloat {
@@ -327,7 +369,9 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
             // A device point is pointScale pixels at pixelsPerInch.
             return macPointsPerInch * pointScale / CGFloat(pixelsPerInch)
         case .fitScreen:
-            let fitted = ScreenGeometry.fittedRect(container: available(on: screen), content: deviceSize)
+            var room = available(on: screen)
+            room.height -= contentView.barHeight
+            let fitted = ScreenGeometry.fittedRect(container: room, content: deviceSize)
             return deviceSize.width > 0 ? fitted.width / deviceSize.width : 1
         }
     }
@@ -341,14 +385,18 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
     private func applyZoom(_ zoom: CGFloat, animate: Bool) {
         guard let window, let screen = window.screen ?? NSScreen.main, !window.styleMask.contains(.fullScreen) else { return }
         let device = deviceSize
-        var size = CGSize(width: device.width * zoom, height: device.height * zoom)
+        guard device.width > 0, device.height > 0 else { return }
+        var zoom = zoom
         let room = available(on: screen)
-        if size.width > room.width || size.height > room.height {
-            size = ScreenGeometry.fittedRect(container: room, content: size).size
+        let wanted = contentSize(forZoom: zoom)
+        if wanted.width > room.width || wanted.height > room.height {
+            zoom = min(room.width / device.width, (room.height - contentView.barHeight) / device.height)
         }
+        var size = contentSize(forZoom: zoom)
         size = CGSize(width: size.width.rounded(), height: size.height.rounded())
-        window.contentAspectRatio = device
-        window.contentMinSize = CGSize(width: device.width * 0.25, height: device.height * 0.25)
+        // The bar's fixed height rules out an aspect ratio, so windowWillResize keeps the shape.
+        window.contentResizeIncrements = CGSize(width: 1, height: 1)
+        window.contentMinSize = contentSize(forZoom: 0.25)
 
         // Grow and shrink from the top left corner, as the classic Simulator does.
         let oldFrame = window.frame
@@ -358,7 +406,22 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
         frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
         window.setFrame(frame, display: true, animate: animate && window.isVisible)
-        if device.width > 0 { savedZoom = size.width / device.width }
+        savedZoom = zoom
+    }
+
+    /// Keeps the device's shape while the window is dragged to size: the zoom follows whichever
+    /// side the drag moved more, and the bar keeps its height.
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let device = deviceSize
+        guard !sender.styleMask.contains(.fullScreen), device.width > 0, device.height > 0 else { return frameSize }
+        let proposed = sender.contentRect(forFrameRect: CGRect(origin: .zero, size: frameSize)).size
+        let current = sender.contentLayoutRect.size
+        let byWidth = proposed.width / device.width
+        let byHeight = max(proposed.height - contentView.barHeight, 1) / device.height
+        let widthLeads = abs(proposed.width - current.width) > abs(proposed.height - current.height)
+            && proposed.width > (contentView.showsBar ? bar.minimumWidth : 0)
+        let size = contentSize(forZoom: max(widthLeads ? byWidth : byHeight, 0.25))
+        return sender.frameRect(forContentRect: CGRect(origin: .zero, size: size)).size
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {
@@ -383,12 +446,20 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
+    private func wireBar() {
+        bar.onHome = { [weak self] in self?.pressHome(nil) }
+        bar.onAppSwitcher = { [weak self] in self?.showAppSwitcher(nil) }
+        bar.onScreenshot = { [weak self] in self?.saveScreen(nil) }
+        bar.onRotate = { [weak self] in self?.rotateRight(nil) }
+        bar.onPosture = { [weak self] posture in self?.changePosture(to: posture) }
+    }
+
     private func normalized(_ viewPoint: CGPoint) -> CGPoint {
         ScreenGeometry.normalizedPoint(
             viewPoint: viewPoint,
             viewSize: screenView.bounds.size,
             pixelSize: pixelSize,
-            orientation: orientation
+            orientation: shownOrientation
         )
     }
 
@@ -538,7 +609,7 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
 
     private func runGesture(_ path: [CGPoint]) {
         guard let hid, !path.isEmpty else { return }
-        let native = path.map { ScreenGeometry.portraitPoint(fromShown: $0, orientation: orientation) }
+        let native = path.map { ScreenGeometry.portraitPoint(fromShown: $0, orientation: shownOrientation) }
         let edge = TouchEdge(ScreenGeometry.edge(forPortraitPoint: native[0]))
         Task {
             hid.sendTouch(at: native[0], phase: .down, edge: edge)
@@ -564,8 +635,8 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         let zoom = currentZoom
         orientation = next
-        renderer.setOrientation(next)
-        chromeView.setOrientation(next)
+        renderer.setOrientation(shownOrientation)
+        chromeView.setOrientation(shownOrientation)
         applyZoom(zoom, animate: true)
         screenView.draw()
     }
@@ -602,27 +673,83 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
     }
 
-    /// The Settings helper's source, which only an app built by scripts/build-app.sh carries.
-    private static let sensitiveURLHelperInputs: (source: URL, entitlements: URL)? = {
+    // Guest helpers, whose sources only an app built by scripts/build-app.sh carries.
+
+    private static let sensitiveURLHelper: GuestHelper? = {
         guard let source = Bundle.main.url(forResource: "open-sensitive-url", withExtension: "m"),
               let entitlements = Bundle.main.url(forResource: "open-sensitive-url", withExtension: "entitlements")
         else { return nil }
-        return (source, entitlements)
+        return Simctl.sensitiveURLHelper(source: source, entitlements: entitlements)
     }()
+
+    private static let hingeHelper: GuestHelper? = {
+        Bundle.main.url(forResource: "set-hinge-angle", withExtension: "m").map(Simctl.hingeHelper(source:))
+    }()
+
+    private static var helperCache: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "OpenSimulator")
+    }
 
     /// Tapping General › Keyboard in Settings shows a blank page on iOS 26.5, but its link works.
     @objc func openKeyboardSettings(_ sender: Any?) {
-        guard let inputs = Self.sensitiveURLHelperInputs else { return }
-        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "OpenSimulator")
-        let udid = udid
+        guard let helper = Self.sensitiveURLHelper else { return }
+        let udid = udid, cache = Self.helperCache
         Task {
             await store.perform(nil) { simctl in
-                let helper = try await simctl.sensitiveURLHelper(
-                    source: inputs.source, entitlements: inputs.entitlements, cache: cache)
-                try await simctl.openSensitiveURL(udid, Simctl.SettingsPage.keyboard.rawValue, helper: helper)
+                let built = try await simctl.build(helper, cache: cache)
+                try await simctl.openSensitiveURL(udid, Simctl.SettingsPage.keyboard.rawValue, helper: built)
             }
         }
+    }
+
+    // MARK: Foldables
+
+    @objc func setHingePosture(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let posture = HingePosture(rawValue: raw) else { return }
+        changePosture(to: posture)
+    }
+
+    /// Folds or unfolds the device, then shows the panel iOS moves to.
+    private func changePosture(to next: HingePosture) {
+        guard isFoldable, !lifecycleInFlight, next != posture else { return }
+        Task {
+            guard await sendPosture(next) else { return }
+            let switchesPanel = next.showsInnerPanel != posture.showsInnerPanel
+            posture = next
+            bar.setPosture(next)
+            if switchesPanel { showPanelForPosture() }
+        }
+    }
+
+    @discardableResult
+    private func sendPosture(_ posture: HingePosture) async -> Bool {
+        guard let helper = Self.hingeHelper else { return false }
+        let udid = udid, cache = Self.helperCache
+        return await store.perform(nil) { simctl in
+            let built = try await simctl.build(helper, cache: cache)
+            try await simctl.setHinge(udid, posture, helper: built)
+        }
+    }
+
+    private func showPanelForPosture() {
+        let zoom = currentZoom
+        display?.stop()
+        do {
+            use(try store.core.openDisplay(forDevice: udid, innerPanel: posture.showsInnerPanel))
+        } catch {
+            display = nil
+            overlay.show(error.localizedDescription)
+            return
+        }
+        applyBezelPreference()
+        chromeView.setScreenPoints(screenPoints)
+        applyZoom(zoom, animate: true)
+        updateStreaming()
+    }
+
+    @objc func toggleBottomBar(_ sender: Any?) {
+        Preferences.showBottomBar.toggle()
     }
 
     @objc func toggleAppearance(_ sender: Any?) {
@@ -658,7 +785,9 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
             .appendingPathComponent("Simulator Screenshot - \(name) - \(formatter.string(from: Date())).png")
         let udid = udid
         Task {
-            if await store.perform(nil, { try await $0.screenshot(udid, to: file) }) {
+            // A foldable has two panels, so simctl has to be told which one is showing.
+            let screenID = isFoldable ? display?.screenID : nil
+            if await store.perform(nil, { try await $0.screenshot(udid, to: file, screenID: screenID == 0 ? nil : screenID) }) {
                 overlay.flash("Saved to \(file.deletingLastPathComponent().lastPathComponent)")
             }
         }
@@ -776,8 +905,8 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         }
         lifecycleInFlight = false
         orientation = .portrait
-        renderer.setOrientation(.portrait)
-        chromeView.setOrientation(.portrait)
+        // A restarted foldable boots closed.
+        posture = .closed
         if ok { await attach() } else { overlay.show(store.lastError ?? "The simulator did not restart.") }
     }
 
@@ -800,6 +929,12 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         case #selector(toggleBezel(_:)):
             menuItem.state = Preferences.showBezel ? .on : .off
             return true
+        case #selector(toggleBottomBar(_:)):
+            menuItem.state = Preferences.showBottomBar ? .on : .off
+            return true
+        case #selector(setHingePosture(_:)):
+            menuItem.state = isFoldable && menuItem.representedObject as? String == posture.rawValue ? .on : .off
+            return isFoldable && Self.hingeHelper != nil && !lifecycleInFlight
         case #selector(toggleStayOnTop(_:)):
             menuItem.state = window?.level == .floating ? .on : .off
             return true
@@ -807,7 +942,7 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
             menuItem.state = Preferences.hardwareKeyboard ? .on : .off
             return display != nil
         case #selector(openKeyboardSettings(_:)):
-            return Self.sensitiveURLHelperInputs != nil && display != nil && !lifecycleInFlight
+            return Self.sensitiveURLHelper != nil && display != nil && !lifecycleInFlight
         case #selector(saveScreen(_:)), #selector(restartDevice(_:)), #selector(eraseDevice(_:)),
              #selector(shutDownDevice(_:)), #selector(setScaleMode(_:)):
             return true

@@ -10,6 +10,7 @@ enum Preferences {
         static let pauseWhenHidden = "PauseRenderingWhenHidden"
         static let frameRateLimit = "FrameRateLimit"
         static let showBezel = "ShowDeviceBezel"
+        static let showBottomBar = "ShowBottomBar"
         static let hardwareKeyboard = "ConnectHardwareKeyboard"
         static let scaleMode = "ScaleMode"
         static let screenshotFolder = "ScreenshotFolder"
@@ -25,6 +26,7 @@ enum Preferences {
             Key.pauseWhenHidden: true,
             Key.frameRateLimit: 60,
             Key.showBezel: true,
+            Key.showBottomBar: true,
             Key.hardwareKeyboard: true,
             Key.scaleMode: ScaleMode.pointAccurate.rawValue,
         ])
@@ -39,6 +41,10 @@ enum Preferences {
     static var showBezel: Bool {
         get { defaults.bool(forKey: Key.showBezel) }
         set { defaults.set(newValue, forKey: Key.showBezel) }
+    }
+    static var showBottomBar: Bool {
+        get { defaults.bool(forKey: Key.showBottomBar) }
+        set { defaults.set(newValue, forKey: Key.showBottomBar) }
     }
     static var hardwareKeyboard: Bool {
         get { defaults.bool(forKey: Key.hardwareKeyboard) }
