@@ -56,6 +56,8 @@ static inline void OSWriteU32(void *base, size_t offset, uint32_t value) {
 @implementation OSHIDClient {
     id<OSPSimDeviceLegacyHIDClient> _client;
     dispatch_queue_t _queue;
+    dispatch_group_t _pending;
+    NSError *_lastError;
     OSMouseBuilder _mouse;
     OSKeyboardBuilder _keyboard;
     OSButtonBuilder _button;
@@ -94,15 +96,36 @@ static inline void OSWriteU32(void *base, size_t offset, uint32_t value) {
     _client = client;
     _touchTarget = kTouchTarget;
     _queue = dispatch_queue_create("OpenSimulator.hid", DISPATCH_QUEUE_SERIAL);
+    _pending = dispatch_group_create();
     return self;
 }
 
 /// Takes ownership of `message`, which must come from malloc.
 - (void)send:(void *_Nullable)message {
     if (!message) { return; }
+    dispatch_group_enter(_pending);
     [_client sendWithMessage:message freeWhenDone:YES completionQueue:_queue completion:^(NSError *error) {
-        if (error) { NSLog(@"OpenSimulator: HID send failed: %@", error.localizedDescription); }
+        if (error) {
+            NSLog(@"OpenSimulator: HID send failed: %@", error.localizedDescription);
+            self->_lastError = error;
+        }
+        dispatch_group_leave(self->_pending);
     }];
+}
+
+- (BOOL)waitUntilSentWithTimeout:(NSTimeInterval)timeout error:(NSError **)error {
+    dispatch_time_t deadline = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC));
+    if (dispatch_group_wait(_pending, deadline) != 0) {
+        if (error) { *error = OSMakeError(33, @"The device did not acknowledge input in time."); }
+        return NO;
+    }
+    __block NSError *failure = nil;
+    dispatch_sync(_queue, ^{ failure = self->_lastError; self->_lastError = nil; });
+    if (failure) {
+        if (error) { *error = failure; }
+        return NO;
+    }
+    return YES;
 }
 
 static inline NSUInteger OSContactType(OSTouchPhase phase) {

@@ -11,11 +11,14 @@ BUILD="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 
 cd "$ROOT"
 swift build -c "$CONFIG" --product OpenSimulator
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/OpenSimulator"
+swift build -c "$CONFIG" --product opensim
+BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/OpenSimulator"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
+cp "$BIN_DIR/OpenSimulator" "$APP/Contents/MacOS/OpenSimulator"
+# The command line tool and MCP server agents use. It finds the app it ships in to show them.
+cp "$BIN_DIR/opensim" "$APP/Contents/Helpers/opensim"
 sed -e "s/__BUNDLE_ID__/$BUNDLE_ID/" -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" \
     packaging/Info.plist > "$APP/Contents/Info.plist"
 # The icon is an Icon Composer document, so it follows the system's light, dark, tinted and clear
@@ -38,10 +41,13 @@ cp Helpers/open-sensitive-url.m Helpers/open-sensitive-url.entitlements Helpers/
 # Ad hoc signature so it runs locally. Not sandboxed: it loads Xcode's simulator frameworks and
 # runs simctl, neither of which a sandboxed app may do.
 IDENTITY="${CODESIGN_IDENTITY:--}"
+# The helper is signed on its own first: signing the app does not reach into Contents/Helpers.
 if [ "$IDENTITY" = "-" ]; then
+    codesign --force --sign - --options runtime "$APP/Contents/Helpers/opensim"
     codesign --force --sign - --options runtime "$APP"
 else
     # Notarization requires the hardened runtime and a secure timestamp.
+    codesign --force --sign "$IDENTITY" --options runtime --timestamp "$APP/Contents/Helpers/opensim"
     codesign --force --sign "$IDENTITY" --options runtime --timestamp "$APP"
 fi
 

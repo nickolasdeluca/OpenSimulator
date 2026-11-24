@@ -1,3 +1,5 @@
+import Foundation
+
 /// macOS virtual key codes (Carbon `kVK_*`) to USB HID keyboard usages (page 0x07), which is what
 /// the simulator's hardware keyboard path takes. These are layout-independent physical keys, so the
 /// device's own keyboard layout decides which character each one produces, as on a real keyboard.
@@ -63,6 +65,95 @@ public enum KeyboardMap {
         return strokes
     }
 
+    /// A key pressed while holding modifiers, which are usages too, e.g. `leftCommand`.
+    public struct Chord: Equatable, Sendable {
+        public let usage: UInt32
+        public let modifiers: [UInt32]
+
+        public init(usage: UInt32, modifiers: [UInt32] = []) {
+            self.usage = usage
+            self.modifiers = modifiers
+        }
+    }
+
+    public struct Untypeable: LocalizedError, Equatable {
+        public let character: Character
+        public var errorDescription: String? {
+            "\"\(character)\" has no key on a US keyboard. Use --paste to type it through the pasteboard."
+        }
+    }
+
+    public static let leftControl: UInt32 = 0xE0
+    public static let leftOption: UInt32 = 0xE2
+
+    /// Chords that type `text` on a US layout. Accented Latin letters use the layout's Option dead
+    /// keys, so "é" is Option-E then E, as on a Mac or an iPad with a hardware keyboard.
+    public static func chords(forTyping text: String) throws -> [Chord] {
+        var chords: [Chord] = []
+        for character in text {
+            if let stroke = strokeByCharacter[character] {
+                chords.append(Chord(stroke))
+                continue
+            }
+            if character == "ç" || character == "Ç" {
+                chords.append(Chord(usage: 0x06, modifiers: character == "Ç" ? [leftOption, leftShift] : [leftOption]))
+                continue
+            }
+            // "é" decomposes to "e" plus a combining acute accent, which is the dead key's job.
+            let scalars = Array(String(character).decomposedStringWithCanonicalMapping.unicodeScalars)
+            guard scalars.count == 2,
+                  let deadKey = deadKeyUsageByMark[scalars[1].value],
+                  let base = strokeByCharacter[Character(scalars[0])],
+                  scalars[0].properties.isAlphabetic
+            else { throw Untypeable(character: character) }
+            chords.append(Chord(usage: deadKey, modifiers: [leftOption]))
+            chords.append(Chord(base))
+        }
+        return chords
+    }
+
+    /// Combining marks to the key that, with Option, makes the matching dead key on a US layout.
+    static let deadKeyUsageByMark: [UInt32: UInt32] = [
+        0x0301: 0x08, // acute: E
+        0x0300: 0x35, // grave: `
+        0x0302: 0x0C, // circumflex: I
+        0x0303: 0x11, // tilde: N
+        0x0308: 0x18, // diaeresis: U
+    ]
+
+    /// Names a person or script would use for a key, for the command line tool.
+    public static let usageByKeyName: [String: UInt32] = {
+        var map: [String: UInt32] = [
+            "return": 0x28, "enter": 0x28, "escape": 0x29, "esc": 0x29,
+            "delete": 0x2A, "backspace": 0x2A, "tab": 0x2B, "space": 0x2C,
+            "forwarddelete": 0x4C, "home": 0x4A, "end": 0x4D, "pageup": 0x4B, "pagedown": 0x4E,
+            "right": 0x4F, "left": 0x50, "down": 0x51, "up": 0x52, "capslock": 0x39,
+        ]
+        for index in 1...12 { map["f\(index)"] = UInt32(0x3A + index - 1) }
+        return map
+    }()
+
+    public static let modifierUsageByName: [String: UInt32] = [
+        "cmd": leftCommand, "command": leftCommand,
+        "shift": leftShift,
+        "alt": leftOption, "option": leftOption, "opt": leftOption,
+        "ctrl": leftControl, "control": leftControl,
+    ]
+
+    /// A named key or a single character, with the modifiers it needs. "B" is Shift-B.
+    public static func chord(forKeyName name: String, modifiers: [UInt32] = []) -> Chord? {
+        var base: Chord?
+        if let usage = usageByKeyName[name.lowercased()] {
+            base = Chord(usage: usage)
+        } else if name.count == 1, let stroke = strokeByCharacter[Character(name)] {
+            base = Chord(stroke)
+        }
+        guard let base else { return nil }
+        var all = modifiers
+        for modifier in base.modifiers where !all.contains(modifier) { all.append(modifier) }
+        return Chord(usage: base.usage, modifiers: all)
+    }
+
     static let strokeByCharacter: [Character: Stroke] = {
         var map: [Character: Stroke] = [:]
         for (index, letter) in "abcdefghijklmnopqrstuvwxyz".enumerated() {
@@ -89,4 +180,10 @@ public enum KeyboardMap {
         map[" "] = Stroke(usage: 0x2C, shift: false)
         return map
     }()
+}
+
+extension KeyboardMap.Chord {
+    init(_ stroke: KeyboardMap.Stroke) {
+        self.init(usage: stroke.usage, modifiers: stroke.shift ? [KeyboardMap.leftShift] : [])
+    }
 }

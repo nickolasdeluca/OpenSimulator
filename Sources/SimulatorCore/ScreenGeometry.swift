@@ -44,6 +44,17 @@ public enum ScreenGeometry {
         }
     }
 
+    /// The inverse of `portraitPoint(fromShown:orientation:)`: where a touch the guest received
+    /// appears in the window.
+    public static func shownPoint(fromPortrait native: CGPoint, orientation: DeviceOrientation) -> CGPoint {
+        switch orientation {
+        case .portrait: native
+        case .landscapeLeft: CGPoint(x: 1 - native.y, y: native.x)
+        case .portraitUpsideDown: CGPoint(x: 1 - native.x, y: 1 - native.y)
+        case .landscapeRight: CGPoint(x: native.y, y: 1 - native.x)
+        }
+    }
+
     /// The edge a contact starting at a portrait-native point is on, so a drag up from the bottom
     /// is the system home gesture, as on a real device.
     public static func edge(forPortraitPoint point: CGPoint, threshold: CGFloat = 0.02) -> EdgeKind {

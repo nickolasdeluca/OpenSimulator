@@ -8,6 +8,8 @@ final class DeviceChromeView: NSView {
     var onButton: ((HardwareButton, Bool) -> Void)?
 
     let screenView: NSView
+    /// Touches and captions while an agent drives the device, between the screen and `overlay`.
+    let agentView: NSView
     let overlay: NSView
     private(set) var chrome: DeviceChrome?
     private var composite: NSImage?
@@ -19,13 +21,15 @@ final class DeviceChromeView: NSView {
     private var pressed: DeviceChrome.Button?
     private var tracking: NSTrackingArea?
 
-    init(screenView: NSView, overlay: NSView) {
+    init(screenView: NSView, agentView: NSView, overlay: NSView) {
         self.screenView = screenView
+        self.agentView = agentView
         self.overlay = overlay
         super.init(frame: .zero)
         addSubview(screenView)
+        addSubview(agentView)
         addSubview(overlay)
-        for view in [screenView, overlay] {
+        for view in [screenView, agentView, overlay] {
             view.wantsLayer = true
             view.layer?.cornerCurve = .continuous
         }
@@ -88,13 +92,14 @@ final class DeviceChromeView: NSView {
         let screen = DeviceLayout.screenRect(upright: uprightSize, chrome: activeChrome)
             .applying(transform).integral
         screenView.frame = screen
+        agentView.frame = screen
         overlay.frame = screen
         // The body's corner radius is its outside edge, so the bezel comes off for the screen's.
         var radius: CGFloat = 0
         if let chrome = activeChrome {
             radius = max(0, chrome.cornerRadius - chrome.maxInset) * hypot(transform.a, transform.b)
         }
-        for view in [screenView, overlay] {
+        for view in [screenView, agentView, overlay] {
             view.layer?.cornerRadius = radius
             view.layer?.masksToBounds = radius > 0
         }

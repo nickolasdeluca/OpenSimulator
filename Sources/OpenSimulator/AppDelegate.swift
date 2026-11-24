@@ -31,6 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(agentWantsDevice(_:)), name: AgentActivity.showRequest, object: nil)
+
         showManager(nil)
         // Devices that were already running get their windows back, the way Simulator reopened them.
         for device in store?.bootedDevices ?? [] {
@@ -81,6 +84,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             store.lastError = error.localizedDescription
         }
+    }
+
+    /// opensim is about to drive a device, so the person gets to watch it: the device's window
+    /// comes up, in front, without taking focus from what they are doing.
+    @objc private func agentWantsDevice(_ note: Notification) {
+        guard let udid = note.object as? String, store?.device(udid)?.state == .booted else { return }
+        let existing = deviceWindows[udid]
+        openDevice(udid)
+        guard let controller = deviceWindows[udid], let window = controller.window else { return }
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        if existing == nil || !window.occlusionState.contains(.visible) { window.orderFrontRegardless() }
+        controller.announceShown()
     }
 
     @objc func showManager(_ sender: Any?) {

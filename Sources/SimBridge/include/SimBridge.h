@@ -92,6 +92,9 @@ NS_SWIFT_NAME(HIDClient)
 /// `usage` is a USB HID keyboard usage (page 0x07), e.g. 0x04 for A.
 - (void)sendKeyUsage:(uint32_t)usage down:(BOOL)down;
 - (void)sendButton:(OSHardwareButton)button down:(BOOL)down;
+/// Blocks until every message sent so far has been delivered, for a caller that exits right after,
+/// such as the command line tool. Fails on a timeout or with the first send error since the last wait.
+- (BOOL)waitUntilSentWithTimeout:(NSTimeInterval)timeout error:(NSError *_Nullable *_Nullable)error;
 
 - (instancetype)init NS_UNAVAILABLE;
 @end

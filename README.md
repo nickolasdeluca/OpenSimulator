@@ -110,6 +110,58 @@ OpenSimulator uses the Xcode chosen by `xcode-select -p`. To use a different one
   Spelling and the other keyboard switches are. On iOS 26.5 simulators, tapping Keyboard in
   Settings shows a blank page, so this is the way to reach them.
 
+## Agents
+
+An agent such as Claude Code can use the device you have open, and you watch it work, the way
+Claude in Chrome works in a browser tab. The app ships `opensim`, a command line tool and MCP
+server, in `OpenSimulator.app/Contents/Helpers/opensim`.
+
+- Before its first action the agent brings up the device's window. If OpenSimulator isn't
+  running, it starts.
+- Each touch shows as a dot on the screen, and typed text and shortcuts show as a caption. While
+  the agent is at work the screen has an orange border and a banner.
+- **Stop** in the banner refuses the agent's next commands, and the agent is told you stopped it.
+  **Allow** lets it go on. A restart of the device also clears it.
+- When the agent turns the device, the window turns with it.
+
+To give Claude Code the tools:
+
+```sh
+claude mcp add opensim -- /Applications/OpenSimulator.app/Contents/Helpers/opensim mcp
+```
+
+The tools are `list_devices`, `screenshot`, `device_info`, `tap`, `long_press`, `swipe`,
+`type_text`, `press_key`, `rotate`, `press_home` and `open_url`. The screenshot has one pixel per
+point, so the agent taps a position it sees in the image as is.
+
+### Command line
+
+The same actions work from a shell or a script:
+
+```sh
+ln -s /Applications/OpenSimulator.app/Contents/Helpers/opensim ~/.local/bin/opensim
+
+opensim tap 400 220                     # points, origin top left, current orientation
+opensim tap 400 220 --count 2           # double tap
+opensim longpress 400 220 --duration 0.8
+opensim swipe 500 900 500 300 --duration 0.3
+opensim type "Olá, café"                # US hardware keyboard; accents through Option dead keys
+opensim type "€ 😀" --paste             # anything else: simctl pbcopy, then ⌘V
+opensim key b --mods cmd                # return, escape, delete, tab, arrows, f1…f12, any character
+opensim rotate left                     # or right, portrait, landscape-left, landscape-right, upside-down
+opensim home
+opensim info                            # {"width": 1024, "height": 1366, "scale": 2, "orientation": "portrait", …}
+```
+
+Every command takes `--device <UDID|name>`, which can be left out when exactly one simulator is
+booted. It prints nothing on success, and errors go to stderr with exit status 1 (failed),
+2 (bad arguments), 3 (device missing or not booted), 4 (not supported by this Xcode) or 5 (stopped
+from the window). Booting, screenshots and the pasteboard are left to `xcrun simctl`.
+
+Nothing in iOS reports which way the device is turned, so the orientation is the last one
+`opensim` or the app set during the current boot. `opensim` tells the app what it does through
+local distributed notifications: no network port, and nothing runs while no agent does.
+
 ## How it works
 
 Device lifecycle (create, boot, shut down, erase, delete), screenshots, URLs, installs and
@@ -143,6 +195,7 @@ Sources/
   SimBridge/       Objective-C bridge to CoreSimulator and SimulatorKit (private API)
   SimulatorCore/   simctl wrapper, coordinate math, keyboard map, resource monitor
   OpenSimulator/   The app: device manager, device windows, Metal renderer, menus
+  opensim/         Command line tool and MCP server for agents
 Helpers/           open-sensitive-url, which the app builds for the simulator on first use
 Tests/             Unit tests for SimulatorCore
 scripts/           build-app.sh
@@ -151,7 +204,7 @@ packaging/         Info.plist and AppIcon.icon (Icon Composer; follows light, da
 
 ## Limitations
 
-- Foldables (iPhone Duo) show their cover screen only.
+- Foldables (iPhone Duo) show their cover screen only, and agents touch only that screen.
 - iOS only. tvOS, watchOS and visionOS are not supported.
 - This app relies on private Apple frameworks. A new Xcode can break the screen or input until
   the bridge is updated. Device management through `simctl` keeps working either way.

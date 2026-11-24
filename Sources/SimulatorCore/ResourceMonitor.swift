@@ -88,6 +88,20 @@ public final class ResourceMonitor: @unchecked Sendable {
         return result
     }
 
+    /// Identifies one boot of a device, from its `launchd_sim`'s pid and start time, or nil when it
+    /// is not running.
+    public static func bootSession(udid: String) -> String? {
+        let upper: Set = [udid.uppercased()]
+        for process in allProcesses() where process.name == "launchd_sim" {
+            guard deviceUDID(of: process.pid, among: upper) != nil else { continue }
+            var info = proc_bsdinfo()
+            let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+            guard proc_pidinfo(process.pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { continue }
+            return "\(process.pid)-\(info.pbi_start_tvsec)"
+        }
+        return nil
+    }
+
     // MARK: libproc
 
     struct ProcessEntry {

@@ -16,6 +16,7 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
     private let screenView: DeviceScreenView
     nonisolated private let renderer: ScreenRenderer
     private let overlay = StatusOverlayView()
+    private let agentView = AgentOverlayView()
     private let chromeView: DeviceChromeView
     private let chrome: DeviceChrome?
     private let bar = DeviceBarView()
@@ -44,6 +45,11 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
     private var contactEdge: TouchEdge = .none
     private var contactIsPinch = false
 
+    // Agents driving the device through opensim: processes in an MCP session, watched so one that
+    // dies without saying so still clears, and a timer for one-shot commands.
+    private var agentSessions: [Int32: DispatchSourceProcess] = [:]
+    private var agentIdleTimer: Timer?
+
     // Frame pacing. The flag is set from the stream queue, so it lives in a locked box.
     nonisolated private let frameQueued = LockedFlag()
     private var lastDraw: CFTimeInterval = 0
@@ -64,7 +70,7 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         if pixelSize.width <= 0 || pixelSize.height <= 0 { pixelSize = CGSize(width: 1206, height: 2622) }
         pointScale = max(snapshot?.pointScale ?? 3, 1)
         chrome = snapshot.flatMap { DeviceChrome.forDeviceType($0.deviceTypeIdentifier) }
-        chromeView = DeviceChromeView(screenView: screenView, overlay: overlay)
+        chromeView = DeviceChromeView(screenView: screenView, agentView: agentView, overlay: overlay)
         contentView = DeviceContentView(deviceView: chromeView, bar: bar)
 
         let window = NSWindow(
@@ -102,6 +108,11 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
             self, selector: #selector(preferencesChanged),
             name: UserDefaults.didChangeNotification, object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(agentEvent(_:)),
+            name: AgentActivity.event, object: udid
+        )
+        wireAgent()
     }
 
     @available(*, unavailable)
@@ -146,6 +157,10 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
     /// so it is retried briefly.
     private func attach() async {
         overlay.show("Connecting…", spinning: true)
+        // opensim may have turned the device while no window showed it.
+        if let session = ResourceMonitor.bootSession(udid: udid) {
+            orientation = OrientationRecord().orientation(udid: udid, session: session)
+        }
         var lastError: Error?
         for _ in 0..<20 {
             guard !isClosing else { return }
@@ -181,6 +196,20 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         // A foldable keeps its posture across a window being closed and opened again, so it is put
         // back in step with what the window shows.
         if isFoldable { Task { await sendPosture(posture) } }
+        if let session = ResourceMonitor.bootSession(udid: udid),
+           AgentBlockList().isBlocked(udid: udid, session: session) {
+            agentView.setState(.stopped)
+        }
+        announceShown()
+    }
+
+    /// The screen is up, so an agent that asked to be watched can start.
+    var isShowingScreen: Bool { display != nil }
+
+    func announceShown() {
+        guard display != nil else { return }
+        DistributedNotificationCenter.default().postNotificationName(
+            AgentActivity.shown, object: udid, userInfo: nil, deliverImmediately: true)
     }
 
     /// Takes a newly opened panel's stream as the one the window shows.
@@ -293,6 +322,10 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
         screenView.releaseModifiers()
         detach()
         NotificationCenter.default.removeObserver(self)
+        DistributedNotificationCenter.default().removeObserver(self)
+        for source in agentSessions.values { source.cancel() }
+        agentSessions.removeAll()
+        agentIdleTimer?.invalidate()
         if Preferences.shutDownOnClose, store.device(udid)?.state == .booted {
             let store = store, udid = udid
             Task { await store.shutdown(udid) }
@@ -633,6 +666,14 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
             overlay.flash(error.localizedDescription)
             return
         }
+        if let session = ResourceMonitor.bootSession(udid: udid) {
+            OrientationRecord().set(next, udid: udid, session: session)
+        }
+        show(next)
+    }
+
+    /// Turns what the window shows, once the device itself has turned.
+    private func show(_ next: DeviceOrientation) {
         let zoom = currentZoom
         orientation = next
         renderer.setOrientation(shownOrientation)
@@ -701,6 +742,67 @@ final class DeviceWindowController: NSWindowController, NSWindowDelegate, NSMenu
                 try await simctl.openSensitiveURL(udid, Simctl.SettingsPage.keyboard.rawValue, helper: built)
             }
         }
+    }
+
+    // MARK: Agents
+
+    private func wireAgent() {
+        agentView.onStop = { [weak self] in self?.setAgentBlocked(true) }
+        agentView.onAllow = { [weak self] in self?.setAgentBlocked(false) }
+    }
+
+    private func setAgentBlocked(_ blocked: Bool) {
+        guard let session = ResourceMonitor.bootSession(udid: udid) else { return }
+        AgentBlockList().setBlocked(blocked, udid: udid, session: session)
+        agentView.setState(blocked ? .stopped : .idle)
+        if !blocked { refreshAgentState() }
+    }
+
+    @objc private func agentEvent(_ note: Notification) {
+        guard let event = AgentActivity.Event(userInfo: note.userInfo) else { return }
+        switch event {
+        case let .touch(native, phase):
+            let shown = ScreenGeometry.shownPoint(fromPortrait: native, orientation: shownOrientation)
+            let size = agentView.bounds.size
+            agentView.showTouch(at: CGPoint(x: shown.x * size.width, y: (1 - shown.y) * size.height), phase: phase)
+        case let .keys(caption):
+            agentView.showCaption(caption)
+        case let .rotated(next):
+            if next != orientation { show(next) }
+        case let .session(pid, active):
+            if active { watchAgent(pid) } else { agentSessions.removeValue(forKey: pid)?.cancel() }
+        }
+        // Commands keep the banner up a while; a session keeps it up until it ends.
+        agentIdleTimer?.invalidate()
+        if case .session(_, false) = event {
+            agentIdleTimer = nil
+        } else {
+            agentIdleTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.agentIdleTimer = nil
+                    self?.refreshAgentState()
+                }
+            }
+        }
+        refreshAgentState()
+    }
+
+    private func watchAgent(_ pid: Int32) {
+        guard agentSessions[pid] == nil else { return }
+        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                self?.agentSessions.removeValue(forKey: pid)?.cancel()
+                self?.refreshAgentState()
+            }
+        }
+        agentSessions[pid] = source
+        source.resume()
+    }
+
+    private func refreshAgentState() {
+        guard agentView.state != .stopped else { return }
+        agentView.setState(agentSessions.isEmpty && agentIdleTimer == nil ? .idle : .active)
     }
 
     // MARK: Foldables

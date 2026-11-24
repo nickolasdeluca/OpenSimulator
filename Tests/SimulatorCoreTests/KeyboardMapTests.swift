@@ -28,4 +28,24 @@ struct KeyboardMapTests {
     @Test func untypeableTextIsRefused() {
         #expect(KeyboardMap.strokes(forTyping: "café") == nil)
     }
+
+    @Test func accentsTypeThroughOptionDeadKeys() throws {
+        let option = KeyboardMap.leftOption
+        let chords = try KeyboardMap.chords(forTyping: "Oé")
+        #expect(chords == [
+            .init(usage: 0x12, modifiers: [KeyboardMap.leftShift]),
+            .init(usage: 0x08, modifiers: [option]),
+            .init(usage: 0x08),
+        ])
+        #expect(try KeyboardMap.chords(forTyping: "ã") == [.init(usage: 0x11, modifiers: [option]), .init(usage: 0x04)])
+        #expect(try KeyboardMap.chords(forTyping: "Ü") == [
+            .init(usage: 0x18, modifiers: [option]), .init(usage: 0x18, modifiers: [KeyboardMap.leftShift]),
+        ])
+        #expect(try KeyboardMap.chords(forTyping: "Ç") == [.init(usage: 0x06, modifiers: [option, KeyboardMap.leftShift])])
+    }
+
+    @Test func charactersWithoutAKeyAreNamed() {
+        #expect(throws: KeyboardMap.Untypeable(character: "€")) { try KeyboardMap.chords(forTyping: "a€") }
+        #expect(throws: KeyboardMap.Untypeable(character: "😀")) { try KeyboardMap.chords(forTyping: "😀") }
+    }
 }
