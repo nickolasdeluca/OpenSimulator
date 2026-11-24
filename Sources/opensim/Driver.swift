@@ -260,12 +260,28 @@ final class Driver {
         return nil
     }
 
-    func openURL(_ url: String, device query: String?) throws {
+    /// Returns what the agent should know about the result.
+    func openURL(_ url: String, device query: String?) throws -> String {
         let target = try target(query)
         try prepare(target)
         post(.keys("Open " + Self.quoted(url)), udid: target.udid)
-        try simctl(["openurl", target.udid, url])
+        let result = try ProcessRunner.runSync("/usr/bin/xcrun", ["simctl", "openurl", target.udid, url],
+                                               environment: ["DEVELOPER_DIR": developerDir])
+        switch result.status {
+        case 0:
+            return "Opened."
+        case Self.simctlTimedOut:
+            // Soon after boot simctl gives up waiting for iOS to confirm, though the request was
+            // delivered and the URL opens a little later. Trying again would open it twice.
+            return "Sent, but the device did not confirm in time, which is usual for a few minutes "
+                + "after boot. The URL usually opens anyway: take a screenshot to check before trying again."
+        default:
+            throw Tool.Failure("simctl openurl failed: \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
     }
+
+    /// simctl's exit status when the device did not answer in time.
+    static let simctlTimedOut: Int32 = 60
 
     /// The screen as the person sees it, scaled to one pixel per point so a position in the image
     /// is the point to tap.

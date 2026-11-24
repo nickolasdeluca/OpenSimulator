@@ -62,8 +62,7 @@ func serveMCP() throws -> Never {
         case .screenshot:
             return [.image(try driver.screenshot(device: device), mimeType: "image/jpeg")]
         case let .openURL(url):
-            try driver.openURL(url, device: device)
-            return [.text("Opened.")]
+            return [.text(try driver.openURL(url, device: device))]
         case .listDevices:
             let devices = driver.bootedDevices().map {
                 ["udid": $0.udid, "name": $0.name, "runtime": $0.runtimeName, "deviceType": $0.deviceTypeName]
