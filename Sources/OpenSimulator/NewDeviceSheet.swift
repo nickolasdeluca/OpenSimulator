@@ -9,13 +9,19 @@ struct NewDeviceSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var runtimeID = ""
     @State private var deviceTypeID = ""
+    /// Empty until the person types one. The device type's name is shown as the hint and used
+    /// when it stays empty, so the hint follows the device picker.
     @State private var name = ""
-    @State private var nameEdited = false
     @State private var isCreating = false
     @State private var disabledServices: Set<ServiceGroup> = []
 
     private var runtime: SimRuntimeInfo? { store.runtimes.first { $0.identifier == runtimeID } }
     private var types: [SimDeviceTypeInfo] { runtime.map(store.deviceTypes(for:)) ?? [] }
+    private var suggestedName: String { types.first { $0.identifier == deviceTypeID }?.name ?? "" }
+    private var effectiveName: String {
+        let typed = name.trimmingCharacters(in: .whitespaces)
+        return typed.isEmpty ? suggestedName : typed
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -33,10 +39,7 @@ struct NewDeviceSheet: View {
                     Picker("Device", selection: $deviceTypeID) {
                         ForEach(types) { Text($0.name).tag($0.identifier) }
                     }
-                    TextField("Name", text: Binding(
-                        get: { name },
-                        set: { name = $0; nameEdited = true }
-                    ))
+                    TextField("Name", text: $name, prompt: Text(suggestedName))
                     Toggle("Lightweight", isOn: Binding(
                         get: { !disabledServices.isEmpty },
                         set: { disabledServices = $0 ? Set(ServiceGroup.allCases) : [] }
@@ -69,7 +72,7 @@ struct NewDeviceSheet: View {
                 Button("Create") { create() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(isCreating || runtime == nil || deviceTypeID.isEmpty
-                              || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                              || effectiveName.isEmpty)
             }
         }
         .padding(20)
@@ -79,23 +82,19 @@ struct NewDeviceSheet: View {
                 deviceTypeID = types.first?.identifier ?? ""
             }
         }
-        .onChange(of: deviceTypeID) { _, newValue in
-            if !nameEdited { name = types.first { $0.identifier == newValue }?.name ?? "" }
-        }
     }
 
     private func chooseDefaults() {
         if runtimeID.isEmpty { runtimeID = store.runtimes.first?.identifier ?? "" }
         if deviceTypeID.isEmpty { deviceTypeID = types.first?.identifier ?? "" }
-        if name.isEmpty { name = types.first { $0.identifier == deviceTypeID }?.name ?? "" }
     }
 
     private func create() {
         isCreating = true
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let name = effectiveName
         Task {
             let udid = await store.create(
-                name: trimmed, deviceType: deviceTypeID, runtime: runtimeID, disabledServices: disabledServices
+                name: name, deviceType: deviceTypeID, runtime: runtimeID, disabledServices: disabledServices
             )
             isCreating = false
             if let udid {
