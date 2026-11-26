@@ -32,10 +32,28 @@ It is built to stay out of your Mac's way:
 - macOS 14 or later on Apple silicon or Intel
 - Xcode 26 or 27 with at least one iOS simulator runtime installed
 
-## Download
+## Install
 
-[Download the latest release](https://ndworks.dev/opensimulator/download), unzip it and move
-`OpenSimulator.app` to Applications. The app is signed with a Developer ID and notarized by Apple.
+```sh
+curl -fsSL https://ndworks.dev/opensimulator/install.sh | sh
+```
+
+The script downloads the latest release, checks its checksum and its Developer ID signature, puts
+the app in `/Applications` and opens it. Run it again at any time to reinstall.
+
+Prefer to do it by hand? [Download the latest release](https://ndworks.dev/opensimulator/download),
+unzip it and move `OpenSimulator.app` to Applications. The app is signed with a Developer ID and
+notarized by Apple.
+
+### Updates
+
+OpenSimulator checks for a new release when it opens and once a day. When there is one, the device
+list offers it, and nothing is installed until you click Update. Check for Updates… in the
+OpenSimulator menu does the same on demand, and Settings can turn the automatic check off. An
+update is installed only if its checksum matches and it carries this project's Developer ID
+signature. Running simulators keep running while the app restarts into the new version.
+
+Builds signed ad hoc, such as `scripts/build-app.sh` makes, don't update themselves.
 
 ## Build and run
 
@@ -51,7 +69,8 @@ starts the app without bundling it.
 
 `scripts/notarize.sh` signs the app with your Developer ID certificate, sends it to Apple's notary
 service, staples the ticket and writes `build/OpenSimulator.zip`, which opens on any Mac without a
-Gatekeeper warning.
+Gatekeeper warning, and `build/latest.json`, the manifest installed apps and the install script
+read from the latest release.
 
 It reads its credentials from a `.env` file in the repository root, which git ignores. Copy
 `.env.example` to `.env` and fill in either an App Store Connect API key or an Apple ID with an
