@@ -29,7 +29,7 @@ It is built to stay out of your Mac's way:
 
 ## Requirements
 
-- macOS 14 or later on Apple silicon
+- macOS 14 or later on Apple silicon or Intel
 - Xcode 26 or 27 with at least one iOS simulator runtime installed
 
 ## Download

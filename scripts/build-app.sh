@@ -10,9 +10,11 @@ VERSION="$(cat "$ROOT/VERSION")"
 BUILD="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 
 cd "$ROOT"
-swift build -c "$CONFIG" --product OpenSimulator
-swift build -c "$CONFIG" --product opensim
-BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
+# Universal, so one app runs natively on Apple silicon and Intel Macs.
+ARCH_FLAGS="--arch arm64 --arch x86_64"
+swift build -c "$CONFIG" $ARCH_FLAGS --product OpenSimulator
+swift build -c "$CONFIG" $ARCH_FLAGS --product opensim
+BIN_DIR="$(swift build -c "$CONFIG" $ARCH_FLAGS --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"

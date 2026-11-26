@@ -40,7 +40,13 @@ extension Simctl {
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         // Built under another name, so a half-written file is never taken for the helper.
         let partial = cache.appendingPathComponent(UUID().uuidString)
-        var arguments = ["--sdk", "iphonesimulator", "clang", "-arch", "arm64", "-mios-simulator-version-min=16.0",
+        // The simulator runs guest code in the Mac's own architecture.
+        #if arch(arm64)
+        let architecture = "arm64"
+        #else
+        let architecture = "x86_64"
+        #endif
+        var arguments = ["--sdk", "iphonesimulator", "clang", "-arch", architecture, "-mios-simulator-version-min=16.0",
                          "-fobjc-arc", "-Os"]
         for framework in helper.frameworks { arguments += ["-framework", framework] }
         if let entitlements = helper.entitlements {
