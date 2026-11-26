@@ -6,6 +6,7 @@ import SwiftUI
 /// Every simulator, grouped by iOS version, with what each running one costs the Mac.
 struct DeviceManagerView: View {
     @ObservedObject var store: SimulatorStore
+    @ObservedObject var updates: UpdateController
     let open: (String) -> Void
 
     @State private var selection: String?
@@ -24,6 +25,10 @@ struct DeviceManagerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let banner = updates.banner {
+                UpdateBanner(state: banner, updates: updates)
+                Divider()
+            }
             if store.devices.isEmpty {
                 emptyState
             } else {
@@ -273,5 +278,72 @@ enum Format {
 
     static func cpu(_ percent: Double) -> String {
         "\(Int(percent.rounded()))%"
+    }
+}
+
+/// Offers a newer release above the device list, and reports how installing it went.
+private struct UpdateBanner: View {
+    let state: UpdateController.State
+    let updates: UpdateController
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(isFailure ? Color.orange : Color.accentColor)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.callout.weight(.medium))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            switch state {
+            case .available, .failed:
+                Button("Release Notes") { NSWorkspace.shared.open(Updates.releasesPage) }
+                    .buttonStyle(.link)
+                    .controlSize(.small)
+                Button("Later") { updates.dismiss() }
+                    .controlSize(.small)
+                Button(isFailure ? "Try Again" : "Update") { updates.install() }
+                    .controlSize(.small)
+                    .keyboardShortcut(.defaultAction)
+            case .installing:
+                ProgressView().controlSize(.small)
+            case .idle:
+                EmptyView()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
+    private var isFailure: Bool {
+        if case .failed = state { return true }
+        return false
+    }
+
+    private var icon: String {
+        isFailure ? "exclamationmark.triangle.fill" : "arrow.down.circle.fill"
+    }
+
+    private var title: String {
+        switch state {
+        case .available(let manifest): "OpenSimulator \(manifest.version) is available"
+        case .installing(let manifest): "Installing OpenSimulator \(manifest.version)…"
+        case .failed(let manifest, _): "OpenSimulator \(manifest.version) couldn't be installed"
+        case .idle: ""
+        }
+    }
+
+    private var detail: String {
+        switch state {
+        case .available: "You have \(UpdateController.currentVersion). Running simulators keep running while it restarts."
+        case .installing: "OpenSimulator restarts when it's done."
+        case .failed(_, let message): message
+        case .idle: ""
+        }
     }
 }

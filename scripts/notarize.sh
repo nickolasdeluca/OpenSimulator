@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds, signs with Developer ID, notarizes and staples build/OpenSimulator.app, then zips it for
-# distribution as build/OpenSimulator.zip.
+# distribution as build/OpenSimulator.zip, described by build/latest.json.
 #
 # Credentials come from the environment or from a .env file in the repository root, which is git
 # ignored (copy .env.example to start). The first of these that is set is used:
@@ -64,4 +64,16 @@ rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 
 spctl --assess --type execute --verbose=2 "$APP"
-echo "Notarized: $ZIP"
+
+# The app's updater and scripts/install.sh read this from the latest release. The checksum is of
+# the zip as published, so it is written last.
+VERSION="$(cat "$ROOT/VERSION")"
+SHA256="$(shasum -a 256 "$ZIP" | cut -d' ' -f1)"
+cat > "$ROOT/build/latest.json" <<JSON
+{
+  "version": "$VERSION",
+  "url": "https://github.com/ndworks-dev/OpenSimulator/releases/download/v$VERSION/OpenSimulator.zip",
+  "sha256": "$SHA256"
+}
+JSON
+echo "Notarized: $ZIP, with build/latest.json"

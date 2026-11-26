@@ -99,8 +99,9 @@ credentials, stop and ask.
    `spctl -a -vv OpenSimulator.app` (expect "Notarized Developer ID") and
    `xcrun stapler validate OpenSimulator.app`.
 3. Tag `vX.Y.Z` with an annotated tag, push it, and create the GitHub release with
-   `gh release create vX.Y.Z build/OpenSimulator.zip`, with notes covering what changed, install
-   steps and requirements.
+   `gh release create vX.Y.Z build/OpenSimulator.zip build/latest.json scripts/install.sh`, with
+   notes covering what changed, install steps and requirements. Publishing it offers the update to
+   every installed copy, which reads `latest.json` from the latest release.
 4. To install locally, quit OpenSimulator, replace `/Applications/OpenSimulator.app` with the new
    build, and relaunch. Quitting shuts down running simulators when that setting is on, so check
    for booted devices first.

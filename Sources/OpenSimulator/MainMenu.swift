@@ -44,6 +44,7 @@ enum MainMenu {
     private static func appMenu(_ app: AppDelegate) -> NSMenu {
         let menu = NSMenu(title: "OpenSimulator")
         menu.addItem(item("About OpenSimulator", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
+        menu.addItem(item("Check for Updates…", #selector(UpdateController.checkFromMenu(_:)), target: app.updates))
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(AppDelegate.showSettings(_:)), ",", target: app))
         menu.addItem(.separator())

@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct SettingsView: View {
+    /// False for builds that don't update themselves, which hides the setting.
+    let updatesAvailable: Bool
+    let updatesChanged: () -> Void
+
     @AppStorage(Preferences.Key.shutDownOnClose) private var shutDownOnClose = true
     @AppStorage(Preferences.Key.shutDownOnQuit) private var shutDownOnQuit = true
     @AppStorage(Preferences.Key.pauseWhenHidden) private var pauseWhenHidden = true
@@ -9,6 +13,7 @@ struct SettingsView: View {
     @AppStorage(Preferences.Key.showBottomBar) private var showBottomBar = true
     @AppStorage(Preferences.Key.scaleMode) private var scaleMode = ScaleMode.pointAccurate.rawValue
     @AppStorage(Preferences.Key.screenshotFolder) private var screenshotFolder = ""
+    @AppStorage(Preferences.Key.checkForUpdates) private var checkForUpdates = true
 
     var body: some View {
         Form {
@@ -43,6 +48,18 @@ struct SettingsView: View {
                         .truncationMode(.middle)
                     Spacer()
                     Button("Choose…", action: chooseFolder)
+                }
+            }
+
+            if updatesAvailable {
+                Section {
+                    Toggle("Check for updates automatically", isOn: $checkForUpdates)
+                        .onChange(of: checkForUpdates) { _, _ in updatesChanged() }
+                } header: {
+                    Text("Updates")
+                } footer: {
+                    Text("Checks when OpenSimulator opens and once a day, and asks before installing.")
+                        .foregroundStyle(.secondary)
                 }
             }
         }

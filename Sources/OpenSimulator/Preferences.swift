@@ -17,6 +17,7 @@ enum Preferences {
         static let disabledServiceGroups = "DisabledServiceGroups"
         static let servicesToApply = "ServiceGroupsToApply"
         static let serviceGroupsVersion = "ServiceGroupsVersion"
+        static let checkForUpdates = "CheckForUpdates"
     }
 
     static func registerDefaults() {
@@ -29,6 +30,7 @@ enum Preferences {
             Key.showBottomBar: true,
             Key.hardwareKeyboard: true,
             Key.scaleMode: ScaleMode.pointAccurate.rawValue,
+            Key.checkForUpdates: true,
         ])
     }
 
@@ -37,6 +39,7 @@ enum Preferences {
     static var shutDownOnClose: Bool { defaults.bool(forKey: Key.shutDownOnClose) }
     static var shutDownOnQuit: Bool { defaults.bool(forKey: Key.shutDownOnQuit) }
     static var pauseWhenHidden: Bool { defaults.bool(forKey: Key.pauseWhenHidden) }
+    static var checkForUpdates: Bool { defaults.bool(forKey: Key.checkForUpdates) }
     static var frameRateLimit: Int { max(defaults.integer(forKey: Key.frameRateLimit), 1) }
     static var showBezel: Bool {
         get { defaults.bool(forKey: Key.showBezel) }

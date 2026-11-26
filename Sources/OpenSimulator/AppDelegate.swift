@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var store: SimulatorStore?
+    let updates = UpdateController()
     private var managerWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var deviceWindows: [String: DeviceWindowController] = [:]
@@ -34,6 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DistributedNotificationCenter.default().addObserver(
             self, selector: #selector(agentWantsDevice(_:)), name: AgentActivity.showRequest, object: nil)
 
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(showManager(_:)), name: .showUpdate, object: nil)
+        updates.start()
+
         showManager(nil)
         // Devices that were already running get their windows back, the way Simulator reopened them.
         for device in store?.bootedDevices ?? [] {
@@ -51,7 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard Preferences.shutDownOnQuit, let store, !deviceWindows.isEmpty, !isTerminating else {
+        // Restarting into an update keeps simulators running; their windows come back at launch.
+        guard Preferences.shutDownOnQuit, !updates.isRelaunching, let store, !deviceWindows.isEmpty, !isTerminating else {
             return .terminateNow
         }
         isTerminating = true
@@ -101,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func showManager(_ sender: Any?) {
         guard let store else { return }
         if managerWindow == nil {
-            let view = DeviceManagerView(store: store) { [weak self] udid in self?.openDevice(udid) }
+            let view = DeviceManagerView(store: store, updates: updates) { [weak self] udid in self?.openDevice(udid) }
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
             window.title = "Simulators"
             window.setContentSize(CGSize(width: 520, height: 460))
@@ -122,7 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func showSettings(_ sender: Any?) {
         if settingsWindow == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
+            let window = NSWindow(contentViewController: NSHostingController(
+                rootView: SettingsView(updatesAvailable: updates.isEnabled) { [weak self] in self?.updates.scheduleChecks() }))
             window.title = "Settings"
             window.styleMask.remove(.resizable)
             window.isReleasedWhenClosed = false
